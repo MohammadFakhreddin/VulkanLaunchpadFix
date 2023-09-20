@@ -4,6 +4,7 @@
 [submodule "external/glslang"]
 	path = external/glslang
 	url = https://github.com/KhronosGroup/glslang.git
+	branch = SPIR-V_1.5
 [submodule "external/glfw"]
 	path = external/glfw
 	url = https://github.com/glfw/glfw
