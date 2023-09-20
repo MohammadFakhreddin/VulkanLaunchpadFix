@@ -551,7 +551,11 @@ std::tuple<vk::ShaderModule, vk::PipelineShaderStageCreateInfo> loadShaderFromFi
 	return loadShaderFromMemoryAndCreateShaderModuleAndStageInfo(content, path, shaderStage);
 }
 
-VkPipeline createGraphicsPipelineInternal(const VklGraphicsPipelineConfig& config, bool loadShadersFromMemoryInstead)
+VkPipeline createGraphicsPipelineInternal(
+	const VklGraphicsPipelineConfig& config, 
+	bool loadShadersFromMemoryInstead, 
+	vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList
+)
 {
     if (!loadShadersFromMemoryInstead && !vklFrameworkInitialized()) {
         VKL_EXIT_WITH_ERROR("Framework not initialized. Ensure to invoke vklInitFramework beforehand!");
@@ -586,7 +590,7 @@ VkPipeline createGraphicsPipelineInternal(const VklGraphicsPipelineConfig& confi
 		.setVertexBindingDescriptionCount(static_cast<uint32_t>(inputBufferBindings.size())).setPVertexBindingDescriptions(inputBufferBindings.data())
 		.setVertexAttributeDescriptionCount(static_cast<uint32_t>(inputAttributeDescriptions.size())).setPVertexAttributeDescriptions(inputAttributeDescriptions.data());
 	// Describe the topology of the vertices
-	auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}.setTopology(vk::PrimitiveTopology::eTriangleList);
+	auto inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{}.setTopology(topology);
 	// Describe viewport and scissors state
 	auto viewport = vk::Viewport{}
 		.setX(0.0f).setY(0.0f)
@@ -670,9 +674,13 @@ VkPipeline createGraphicsPipelineInternal(const VklGraphicsPipelineConfig& confi
 	return graphicsPipelineHandle;
 }
 
-VkPipeline vklCreateGraphicsPipeline(const VklGraphicsPipelineConfig& config, bool loadShadersFromMemoryInstead)
+VkPipeline vklCreateGraphicsPipeline(
+	const VklGraphicsPipelineConfig& config, 
+	bool loadShadersFromMemoryInstead,
+	PrimitiveTopology topology
+)
 {
-	auto graphicsPipelineHandle = createGraphicsPipelineInternal(config, loadShadersFromMemoryInstead);
+	auto graphicsPipelineHandle = createGraphicsPipelineInternal(config, loadShadersFromMemoryInstead, static_cast<vk::PrimitiveTopology>(topology));
 	if (VK_NULL_HANDLE == graphicsPipelineHandle) {
         VKL_EXIT_WITH_ERROR("Failed to create graphics pipeline. Check console output if there were any problems with shader compilation!");
 	}

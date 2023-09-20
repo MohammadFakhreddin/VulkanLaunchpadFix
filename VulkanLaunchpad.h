@@ -303,7 +303,25 @@ void vklEndRecordingCommands();
  *	@param loadShadersFromMemory If true, then the shader paths of the config struct are interpreted as shader code.
  *	@return On success, a valid VkPipeline handle is returned.
  */
-VkPipeline vklCreateGraphicsPipeline(const VklGraphicsPipelineConfig &config, bool loadShadersFromMemory = false);
+enum class PrimitiveTopology
+{
+    ePointList = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+    eLineList = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+    eLineStrip = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+    eTriangleList = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    eTriangleStrip = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+    eTriangleFan = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+    eLineListWithAdjacency = VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+    eLineStripWithAdjacency = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
+    eTriangleListWithAdjacency = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+    eTriangleStripWithAdjacency = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
+    ePatchList = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST
+};
+VkPipeline vklCreateGraphicsPipeline(
+    const VklGraphicsPipelineConfig &config, 
+    bool loadShadersFromMemory = false, 
+    PrimitiveTopology topology = PrimitiveTopology::eTriangleList
+);
 
 /*!
  *	Destroys a graphics pipeline that has been previously created with vklCreateGraphicsPipeline.
