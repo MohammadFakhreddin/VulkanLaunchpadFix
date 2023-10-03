@@ -169,6 +169,8 @@ struct VklGraphicsPipelineConfig {
      *    dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
      */
     bool enableAlphaBlending = false;
+
+    std::vector<VkPushConstantRange> pushConstantRanges{};
 };
 
 /*!

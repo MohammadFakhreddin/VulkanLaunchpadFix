@@ -642,14 +642,17 @@ VkPipeline createGraphicsPipelineInternal(
 		, nullptr, mDispatchLoader
 		);
 
+	std::vector<vk::PushConstantRange> pushConstantRanges(std::begin(config.pushConstantRanges), std::end(config.pushConstantRanges));
 	// Continue with configuring our graphics pipeline:
 	// Create a PIPELINE LAYOUT which describes all RESOURCES that are passed in to our pipeline (Resource Descriptors that we have created above)
 	auto pipelineLayout = mDevice.createPipelineLayoutUnique(
 		vk::PipelineLayoutCreateInfo{} // A pipeline's layout describes all resources used by a pipeline or in shaders.
-	.setSetLayoutCount(1u)
-		.setPSetLayouts(&descriptorSetLayout.get()) // We don't need the actual descriptors when defining the PIPELINE. The LAYOUT is sufficient at this point.
+		.setSetLayoutCount(1u)
+		.setPSetLayouts(&descriptorSetLayout.get())
+		.setPushConstantRangeCount(config.pushConstantRanges.size())
+		.setPPushConstantRanges(pushConstantRanges.data())// We don't need the actual descriptors when defining the PIPELINE. The LAYOUT is sufficient at this point.
 		, nullptr, mDispatchLoader
-		);
+	);
 
 	// Put everything together:
 	auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
