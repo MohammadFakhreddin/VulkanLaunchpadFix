@@ -15,7 +15,7 @@
 #include <variant>
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tinyobjloader/tiny_obj_loader.h>
-//#define USE_SHADERC
+ //#define USE_SHADERC
 #define USE_GLSLANG
 
 // Always use GLI, since the manual implementation of DDS loading does not currently work.
@@ -45,18 +45,18 @@
 #include <gli/texture2d.hpp>
 #endif
 
-vk::Instance mInstance                   = {};
-vk::SurfaceKHR mSurface                  = {};
-vk::PhysicalDevice mPhysicalDevice       = {};
-vk::Device mDevice                       = {};
+vk::Instance mInstance = {};
+vk::SurfaceKHR mSurface = {};
+vk::PhysicalDevice mPhysicalDevice = {};
+vk::Device mDevice = {};
 vk::DispatchLoaderStatic mDispatchLoader = {};
-vk::Queue mQueue                         = {};
-VklSwapchainConfig mSwapchainConfig      = {};
+vk::Queue mQueue = {};
+VklSwapchainConfig mSwapchainConfig = {};
 std::vector<std::vector<vk::ClearValue>> mClearValues;
 
 #ifdef VKL_HAS_VMA
-VmaAllocator mVmaAllocator               = {};
-bool vklHasVmaAllocator()                { return VmaAllocator{} != mVmaAllocator; }
+VmaAllocator mVmaAllocator = {};
+bool vklHasVmaAllocator() { return VmaAllocator{} != mVmaAllocator; }
 #endif
 
 bool mFrameworkInitialized = false;
@@ -105,6 +105,8 @@ int mModKeysForShaderHotReloading = 0;
 std::unordered_map<VkPipeline, std::tuple<VklGraphicsPipelineConfig, std::string, std::string, bool>> mUserKnownPipelines;
 std::unordered_map<VkPipeline, VkPipeline> mPipelineSurrogates;
 std::deque<std::tuple<int64_t, VkPipeline>> mPipelineGraveyard;
+
+bool mResized = false;
 
 // TODO: Implement this MAKEFOURCC in a sane way instead of just copying definitions.
 enum class byte : unsigned char {};
@@ -380,7 +382,7 @@ std::vector<uint32_t> compileShaderSourceToSpirv(const std::string& shaderSource
 
 	if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
 		std::cout << "\nERROR:   Failed to compile shader[" << inputFilename << " of kind[" << to_string(shaderKind) << "]\n"
-			      << "\n         Reason(s)[\n" << module.GetErrorMessage() << "\n         ]" << std::endl;
+			<< "\n         Reason(s)[\n" << module.GetErrorMessage() << "\n         ]" << std::endl;
 
 		throw std::runtime_error("Failed to compile shader " + inputFilename);
 	}
@@ -402,7 +404,7 @@ std::vector<uint32_t> compileShaderSourceToSpirv(const std::string& shaderSource
 	input.target_language = GLSLANG_TARGET_SPV;
 	// SPIR-V 1.5 has been released on September 13th, 2019 to accompany the launch of Vulkan 1.2
 	// However, Vulkan 1.1 requires Spir-V 1.3, go with 1.3 to match the Vulkan 1.1 target above:
-	input.target_language_version = GLSLANG_TARGET_SPV_1_3; 
+	input.target_language_version = GLSLANG_TARGET_SPV_1_3;
 	input.code = shaderCode;
 	input.default_version = 100;
 	input.default_profile = GLSLANG_NO_PROFILE;
@@ -410,22 +412,22 @@ std::vector<uint32_t> compileShaderSourceToSpirv(const std::string& shaderSource
 	input.forward_compatible = false;
 	input.messages = GLSLANG_MSG_DEFAULT_BIT;
 	input.resource = &defaultResources;
-	
+
 	glslang_shader_t* shader = glslang_shader_create(&input);
 
 	if (!glslang_shader_preprocess(shader, &input))
 	{
 		std::cout << "\nERROR:   Failed to preprocess shader[" << inputFilename << "] of kind[" << to_string(shaderStage) << "]"
-			      << "\n         Log[" << glslang_shader_get_info_log(shader) << "]"
-			      << "\n         Debug-Log[" << glslang_shader_get_info_debug_log(shader) << "]" << std::endl;
+			<< "\n         Log[" << glslang_shader_get_info_log(shader) << "]"
+			<< "\n         Debug-Log[" << glslang_shader_get_info_debug_log(shader) << "]" << std::endl;
 		return resultingSpirv;
 	}
 
 	if (!glslang_shader_parse(shader, &input))
 	{
 		std::cout << "\nERROR:   Failed to parse shader[" << inputFilename << "] of kind[" << to_string(shaderStage) << "]"
-			      << "\n         Log[" << glslang_shader_get_info_log(shader) << "]"
-			      << "\n         Debug-Log[" << glslang_shader_get_info_debug_log(shader) << "]" << std::endl;
+			<< "\n         Log[" << glslang_shader_get_info_log(shader) << "]"
+			<< "\n         Debug-Log[" << glslang_shader_get_info_debug_log(shader) << "]" << std::endl;
 		return resultingSpirv;
 	}
 
@@ -435,8 +437,8 @@ std::vector<uint32_t> compileShaderSourceToSpirv(const std::string& shaderSource
 	if (!glslang_program_link(program, GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT))
 	{
 		std::cout << "\nERROR:   Failed to link shader[" << inputFilename << "] of kind[" << to_string(shaderStage) << "]"
-			      << "\n         Log[" << glslang_shader_get_info_log(shader) << "]"
-			      << "\n         Debug-Log[" << glslang_shader_get_info_debug_log(shader) << "]" << std::endl;
+			<< "\n         Log[" << glslang_shader_get_info_log(shader) << "]"
+			<< "\n         Debug-Log[" << glslang_shader_get_info_debug_log(shader) << "]" << std::endl;
 		return resultingSpirv;
 	}
 
@@ -446,7 +448,7 @@ std::vector<uint32_t> compileShaderSourceToSpirv(const std::string& shaderSource
 	{
 		printf("%s", glslang_program_SPIRV_get_messages(program));
 		std::cout << "\nINFO:    Got messages for shader[" << inputFilename << " of kind[" << to_string(shaderStage) << "]"
-			      << "\n         Message[" << glslang_program_SPIRV_get_messages(program) << "]" << std::endl;
+			<< "\n         Message[" << glslang_program_SPIRV_get_messages(program) << "]" << std::endl;
 	}
 
 	auto* spirvDataPtr = glslang_program_SPIRV_get_ptr(program);
@@ -455,7 +457,7 @@ std::vector<uint32_t> compileShaderSourceToSpirv(const std::string& shaderSource
 
 	glslang_program_delete(program);
 	glslang_shader_delete(shader);
-	
+
 #endif
 	return resultingSpirv;
 #endif
@@ -530,7 +532,7 @@ std::tuple<vk::ShaderModule, vk::PipelineShaderStageCreateInfo> loadShaderFromMe
 
 std::tuple<vk::ShaderModule, vk::PipelineShaderStageCreateInfo> loadShaderFromFileAndCreateShaderModuleAndStageInfo(const std::string& shader_filename, const vk::ShaderStageFlagBits shaderStage)
 {
-    std::string path = {};
+	std::string path = {};
 
 	std::ifstream infile(shader_filename);
 	if (infile.good()) {
@@ -552,15 +554,15 @@ std::tuple<vk::ShaderModule, vk::PipelineShaderStageCreateInfo> loadShaderFromFi
 }
 
 VkPipeline createGraphicsPipelineInternal(
-	const VklGraphicsPipelineConfig& config, 
-	bool loadShadersFromMemoryInstead, 
+	const VklGraphicsPipelineConfig& config,
+	bool loadShadersFromMemoryInstead,
 	vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList
 )
 {
-    if (!loadShadersFromMemoryInstead && !vklFrameworkInitialized()) {
-        VKL_EXIT_WITH_ERROR("Framework not initialized. Ensure to invoke vklInitFramework beforehand!");
-    }
-    // Create the graphics pipeline, describe every state of it
+	if (!loadShadersFromMemoryInstead && !vklFrameworkInitialized()) {
+		VKL_EXIT_WITH_ERROR("Framework not initialized. Ensure to invoke vklInitFramework beforehand!");
+	}
+	// Create the graphics pipeline, describe every state of it
 	// Get tuples of <vk::ShaderModule, vk::PipelineShaderStageCreateInfo>
 	auto vertTpl = loadShadersFromMemoryInstead
 		? loadShaderFromMemoryAndCreateShaderModuleAndStageInfo(config.vertexShaderPath, "vertex shader from memory", vk::ShaderStageFlagBits::eVertex)
@@ -610,7 +612,7 @@ VkPipeline createGraphicsPipelineInternal(
 	auto multisampleState = vk::PipelineMultisampleStateCreateInfo{}.setRasterizationSamples(vk::SampleCountFlagBits::e1);
 	// Configure depth/stencil state
 	auto depthStencilState = vk::PipelineDepthStencilStateCreateInfo{}
-		.setDepthTestEnable( mHasDepthAttachments ? VK_TRUE : VK_FALSE)
+		.setDepthTestEnable(mHasDepthAttachments ? VK_TRUE : VK_FALSE)
 		.setDepthWriteEnable(mHasDepthAttachments ? VK_TRUE : VK_FALSE)
 		.setDepthCompareOp(vk::CompareOp::eLess);
 	// Configure blending and which color channels are written
@@ -630,24 +632,24 @@ VkPipeline createGraphicsPipelineInternal(
 	}
 
 	auto colorBlendState = vk::PipelineColorBlendStateCreateInfo{}.setAttachmentCount(1u).setPAttachments(&colorBlendAttachmentState);
-	
+
 	// But again: not so fast! We have to define the LAYOUT of our descriptors first
 	std::vector<vk::DescriptorSetLayoutBinding> layoutBindings(std::begin(config.descriptorLayout), std::end(config.descriptorLayout));
 	auto descriptorSetLayout = mDevice.createDescriptorSetLayoutUnique(
 		vk::DescriptorSetLayoutCreateInfo{}
-			.setBindingCount(static_cast<uint32_t>(layoutBindings.size()))
-			.setPBindings(layoutBindings.data())
+	.setBindingCount(static_cast<uint32_t>(layoutBindings.size()))
+		.setPBindings(layoutBindings.data())
 		, nullptr, mDispatchLoader
-	);
+		);
 
 	// Continue with configuring our graphics pipeline:
 	// Create a PIPELINE LAYOUT which describes all RESOURCES that are passed in to our pipeline (Resource Descriptors that we have created above)
 	auto pipelineLayout = mDevice.createPipelineLayoutUnique(
 		vk::PipelineLayoutCreateInfo{} // A pipeline's layout describes all resources used by a pipeline or in shaders.
-			.setSetLayoutCount(1u)
-			.setPSetLayouts(&descriptorSetLayout.get()) // We don't need the actual descriptors when defining the PIPELINE. The LAYOUT is sufficient at this point.
+	.setSetLayoutCount(1u)
+		.setPSetLayouts(&descriptorSetLayout.get()) // We don't need the actual descriptors when defining the PIPELINE. The LAYOUT is sufficient at this point.
 		, nullptr, mDispatchLoader
-	);
+		);
 
 	// Put everything together:
 	auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
@@ -663,7 +665,7 @@ VkPipeline createGraphicsPipelineInternal(
 		.setRenderPass(mRenderpass.get()).setSubpass(0u); // <--- Which subpass of the given renderpass we are going to use this graphics pipeline for
 	// FINALLY:
 	auto graphicsPipeline = mDevice.createGraphicsPipeline(nullptr, pipelineCreateInfo).value;
-	
+
 	// Don't need the modules anymore:
 	mDevice.destroyShaderModule(std::get<vk::ShaderModule>(fragTpl));
 	mDevice.destroyShaderModule(std::get<vk::ShaderModule>(vertTpl));
@@ -675,14 +677,14 @@ VkPipeline createGraphicsPipelineInternal(
 }
 
 VkPipeline vklCreateGraphicsPipeline(
-	const VklGraphicsPipelineConfig& config, 
+	const VklGraphicsPipelineConfig& config,
 	bool loadShadersFromMemoryInstead,
 	PrimitiveTopology topology
 )
 {
 	auto graphicsPipelineHandle = createGraphicsPipelineInternal(config, loadShadersFromMemoryInstead, static_cast<vk::PrimitiveTopology>(topology));
 	if (VK_NULL_HANDLE == graphicsPipelineHandle) {
-        VKL_EXIT_WITH_ERROR("Failed to create graphics pipeline. Check console output if there were any problems with shader compilation!");
+		VKL_EXIT_WITH_ERROR("Failed to create graphics pipeline. Check console output if there were any problems with shader compilation!");
 	}
 	// Store for hot reloading, but only those handles, which the user requested explicitly (hence the split of createGraphicsPipelineInternal and vklCreateGraphicsPipeline):
 	mUserKnownPipelines[graphicsPipelineHandle] = std::make_tuple(config, std::string(config.vertexShaderPath), std::string(config.fragmentShaderPath), loadShadersFromMemoryInstead);
@@ -704,14 +706,14 @@ void destroyGraphicsPipelineInternal(VkPipeline pipeline)
 
 	// Also remove it from the graveyard:
 	mPipelineGraveyard.erase(std::remove_if(
-			mPipelineGraveyard.begin(),
-			mPipelineGraveyard.end(),
-			[pipeline](const std::tuple<int64_t, VkPipeline>& element) { 
-				return std::get<1>(element) == pipeline; 
-			}
-		), mPipelineGraveyard.end());
+		mPipelineGraveyard.begin(),
+		mPipelineGraveyard.end(),
+		[pipeline](const std::tuple<int64_t, VkPipeline>& element) {
+			return std::get<1>(element) == pipeline;
+		}
+	), mPipelineGraveyard.end());
 	// ...and as a surrogate (i.e., "pointed to"):
-	for(auto it = mPipelineSurrogates.begin(); it != mPipelineSurrogates.end();) {
+	for (auto it = mPipelineSurrogates.begin(); it != mPipelineSurrogates.end();) {
 		if (it->second == pipeline) {
 			it = mPipelineSurrogates.erase(it);
 		}
@@ -737,7 +739,7 @@ void vklDestroyGraphicsPipeline(VkPipeline pipeline)
 		mUserKnownPipelines.erase(it);
 	}
 	// ...and potentially also from surrogate list (if it is the "points from" entry):
-	for(auto it = mPipelineSurrogates.begin(); it != mPipelineSurrogates.end();) {
+	for (auto it = mPipelineSurrogates.begin(); it != mPipelineSurrogates.end();) {
 		if (it->first == pipeline) {
 			it = mPipelineSurrogates.erase(it);
 		}
@@ -751,66 +753,66 @@ vk::MemoryAllocateInfo vklCreateMemoryAllocateInfo(vk::DeviceSize bufferSize, vk
 	auto memoryAllocInfo = vk::MemoryAllocateInfo{}
 		.setAllocationSize(std::max(bufferSize, memoryRequirements.size))
 		.setMemoryTypeIndex([&]() {
-			// Get memory types supported by the physical device:
-			auto memoryProperties = mPhysicalDevice.getMemoryProperties();
+		// Get memory types supported by the physical device:
+		auto memoryProperties = mPhysicalDevice.getMemoryProperties();
 
-			// In search for a suitable memory type INDEX:
-			int selectedMemIndex = -1;
-			vk::DeviceSize selectedHeapSize = 0;
-			for (int i = 0; i < static_cast<int>(memoryProperties.memoryTypeCount); ++i) {
+		// In search for a suitable memory type INDEX:
+		int selectedMemIndex = -1;
+		vk::DeviceSize selectedHeapSize = 0;
+		for (int i = 0; i < static_cast<int>(memoryProperties.memoryTypeCount); ++i) {
 
-				// Is this kind of memory suitable for our buffer?
-				const auto bitmask = memoryRequirements.memoryTypeBits;
-				const auto bit = 1 << i;
-				if (0 == (bitmask & bit)) {
-					continue; // => nope
-				}
-
-				// Does this kind of memory support our usage requirements?
-				if ((memoryProperties.memoryTypes[i].propertyFlags & (memoryPropertyFlags)) != vk::MemoryPropertyFlags{}) {
-					// Would support => now select the one with the largest heap:
-					const auto heapSize = memoryProperties.memoryHeaps[memoryProperties.memoryTypes[i].heapIndex].size;
-					if (heapSize > selectedHeapSize) {
-						// We have a new king:
-						selectedMemIndex = i;
-						selectedHeapSize = heapSize;
-					}
-				}
+			// Is this kind of memory suitable for our buffer?
+			const auto bitmask = memoryRequirements.memoryTypeBits;
+			const auto bit = 1 << i;
+			if (0 == (bitmask & bit)) {
+				continue; // => nope
 			}
 
-			if (-1 == selectedMemIndex) {
-				VKL_EXIT_WITH_ERROR(std::string("ERROR: Couldn't find suitable memory of size[") + std::to_string(bufferSize) + "] and requirements[" + std::to_string(memoryRequirements.alignment) + ", " + std::to_string(memoryRequirements.memoryTypeBits) + ", " + std::to_string(memoryRequirements.size) + "]");
+			// Does this kind of memory support our usage requirements?
+			if ((memoryProperties.memoryTypes[i].propertyFlags & (memoryPropertyFlags)) != vk::MemoryPropertyFlags{}) {
+				// Would support => now select the one with the largest heap:
+				const auto heapSize = memoryProperties.memoryHeaps[memoryProperties.memoryTypes[i].heapIndex].size;
+				if (heapSize > selectedHeapSize) {
+					// We have a new king:
+					selectedMemIndex = i;
+					selectedHeapSize = heapSize;
+				}
 			}
+		}
 
-			// all good, we found a suitable memory index:
-			return static_cast<uint32_t>(selectedMemIndex);
-		}());
+		if (-1 == selectedMemIndex) {
+			VKL_EXIT_WITH_ERROR(std::string("ERROR: Couldn't find suitable memory of size[") + std::to_string(bufferSize) + "] and requirements[" + std::to_string(memoryRequirements.alignment) + ", " + std::to_string(memoryRequirements.memoryTypeBits) + ", " + std::to_string(memoryRequirements.size) + "]");
+		}
+
+		// all good, we found a suitable memory index:
+		return static_cast<uint32_t>(selectedMemIndex);
+			}());
 	return memoryAllocInfo;
 }
 
 VkMemoryAllocateInfo vklCreateMemoryAllocateInfo(VkDeviceSize bufferSize, VkMemoryRequirements memoryRequirements, VkMemoryPropertyFlags memoryPropertyFlags) {
-  return static_cast<VkMemoryAllocateInfo>(vklCreateMemoryAllocateInfo(static_cast<vk::DeviceSize>(bufferSize), static_cast<vk::MemoryRequirements>(memoryRequirements), static_cast<vk::MemoryPropertyFlags>(memoryPropertyFlags)));
+	return static_cast<VkMemoryAllocateInfo>(vklCreateMemoryAllocateInfo(static_cast<vk::DeviceSize>(bufferSize), static_cast<vk::MemoryRequirements>(memoryRequirements), static_cast<vk::MemoryPropertyFlags>(memoryPropertyFlags)));
 }
 
 VkDeviceMemory vklAllocateMemoryForGivenRequirements(VkDeviceSize bufferSize, VkMemoryRequirements memoryRequirements, VkMemoryPropertyFlags memoryPropertyFlags)
 {
-    const auto memoryAllocInfo = vklCreateMemoryAllocateInfo(bufferSize, memoryRequirements, memoryPropertyFlags);
+	const auto memoryAllocInfo = vklCreateMemoryAllocateInfo(bufferSize, memoryRequirements, memoryPropertyFlags);
 
 	// Allocate:
 	VkDeviceMemory memory;
-    VkResult returnCode = vkAllocateMemory(static_cast<VkDevice>(mDevice), &memoryAllocInfo, NULL, &memory);
+	VkResult returnCode = vkAllocateMemory(static_cast<VkDevice>(mDevice), &memoryAllocInfo, NULL, &memory);
 	if (returnCode == VK_SUCCESS) {
 		return memory;
 	}
 	else {
-    	VKL_EXIT_WITH_ERROR(std::string("Error allocating memory of size [") + std::to_string(bufferSize) + "] and requirements[" + std::to_string(memoryRequirements.alignment) + ", " + std::to_string(memoryRequirements.memoryTypeBits) + ", " + std::to_string(memoryRequirements.size) + "]\n    Error Code: " + to_string(returnCode));
+		VKL_EXIT_WITH_ERROR(std::string("Error allocating memory of size [") + std::to_string(bufferSize) + "] and requirements[" + std::to_string(memoryRequirements.alignment) + ", " + std::to_string(memoryRequirements.memoryTypeBits) + ", " + std::to_string(memoryRequirements.size) + "]\n    Error Code: " + to_string(returnCode));
 	}
 }
 
 vk::UniqueDeviceMemory vklAllocateMemoryForGivenRequirements(vk::DeviceSize bufferSize, vk::MemoryRequirements memoryRequirements, vk::MemoryPropertyFlags memoryPropertyFlags) {
-  const auto memoryAllocInfo = vklCreateMemoryAllocateInfo(bufferSize, memoryRequirements, memoryPropertyFlags);
-  auto allocatedMemory = mDevice.allocateMemoryUnique(memoryAllocInfo, nullptr, mDispatchLoader);
-  return allocatedMemory;
+	const auto memoryAllocInfo = vklCreateMemoryAllocateInfo(bufferSize, memoryRequirements, memoryPropertyFlags);
+	auto allocatedMemory = mDevice.allocateMemoryUnique(memoryAllocInfo, nullptr, mDispatchLoader);
+	return allocatedMemory;
 }
 
 VkBuffer vklCreateHostCoherentBufferWithBackingMemory(VkDeviceSize buffer_size, VkBufferUsageFlags buffer_usage)
@@ -840,8 +842,8 @@ VkBuffer vklCreateHostCoherentBufferWithBackingMemory(VkDeviceSize buffer_size, 
 	auto buffer = mDevice.createBuffer(createInfo);
 
 	// Allocate the memory (we want host-coherent memory):
-    auto memory = vklAllocateMemoryForGivenRequirements(static_cast<vk::DeviceSize>(buffer_size), mDevice.getBufferMemoryRequirements(buffer), vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-    
+	auto memory = vklAllocateMemoryForGivenRequirements(static_cast<vk::DeviceSize>(buffer_size), mDevice.getBufferMemoryRequirements(buffer), vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
 	// Bind the buffer handle to the memory:
 	// mDevice.bindBufferMemory(buffer, memory.get(), 0);
 	mDevice.bindBufferMemory(buffer, memory.get(), 0);
@@ -999,13 +1001,13 @@ void vklCopyDataIntoHostCoherentBuffer(VkBuffer buffer, size_t buffer_offset_in_
  * @return The handle of the newly generated buffer.
  */
 VkBuffer vklCreateHostCoherentBufferAndUploadData(const void* data, size_t size, VkBufferUsageFlags usageFlags) {
-    VkBuffer result {};
-    result = vklCreateHostCoherentBufferWithBackingMemory(
-            static_cast<VkDeviceSize>(size),
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | usageFlags
-    );
-    vklCopyDataIntoHostCoherentBuffer(result, data, size);
-    return result;
+	VkBuffer result{};
+	result = vklCreateHostCoherentBufferWithBackingMemory(
+		static_cast<VkDeviceSize>(size),
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | usageFlags
+	);
+	vklCopyDataIntoHostCoherentBuffer(result, data, size);
+	return result;
 }
 
 const char* vklRequiredInstanceExtensions[] = {
@@ -1016,6 +1018,18 @@ const char** vklGetRequiredInstanceExtensions(uint32_t* out_count)
 {
 	*out_count = sizeof(vklRequiredInstanceExtensions) / sizeof(const char*);
 	return vklRequiredInstanceExtensions;
+}
+
+bool vklIsResized()
+{
+	return mResized;
+}
+
+void vklResize()
+{
+	vkDeviceWaitIdle(vklGetDevice());
+	vklDestroyRenderResources();
+	vklCreateRenderResources(mSwapchainConfig);
 }
 
 void vklBindDescriptorSetToPipeline(VkDescriptorSet descriptor_set, VkPipeline pipeline)
@@ -1034,7 +1048,7 @@ void vklBindDescriptorSetToPipeline(VkDescriptorSet descriptor_set, VkPipeline p
 	if (mPipelineLayouts.end() == searchPl) {
 		VKL_EXIT_WITH_ERROR("Couldn't find the VkPipeline passed to vklBindDescriptorSetToPipeline. Is it a valid handle and has it been created with vklCreateGraphicsPipeline(...)?");
 	}
-	
+
 	auto dset = vk::DescriptorSet{ descriptor_set };
 	auto pipe = vk::Pipeline{ pipeline };
 	auto pipeLayout = std::get<vk::UniquePipelineLayout>(searchPl->second).get();
@@ -1055,6 +1069,207 @@ VkPipelineLayout vklGetLayoutForPipeline(VkPipeline pipeline)
 		VKL_EXIT_WITH_ERROR("Couldn't find the VkPipeline passed to vklBindDescriptorSetToPipeline. Is it a valid handle and has it been created with vklCreateGraphicsPipeline(...)?");
 	}
 	return static_cast<VkPipelineLayout>(std::get<vk::UniquePipelineLayout>(searchPl->second).get());
+}
+
+void vklCreateRenderResources(const VklSwapchainConfig& swapchain_config)
+{
+	mSwapchainConfig = swapchain_config;
+
+	auto surfaceCapabilities = mPhysicalDevice.getSurfaceCapabilitiesKHR(mSurface);
+
+	// Get swapchain image extents:
+	if (swapchain_config.imageExtent.width != surfaceCapabilities.currentExtent.width || swapchain_config.imageExtent.height != surfaceCapabilities.currentExtent.height) {
+		std::cout << "WARNING: Swapchain config's extents[" << swapchain_config.imageExtent.width << "x" << swapchain_config.imageExtent.height << "] do not match the surface capabilities' extents[" << surfaceCapabilities.currentExtent.width << "x" << surfaceCapabilities.currentExtent.height << "]" << VKL_DESCRIBE_FILE_LOCATION_FOR_OUT_STREAM << "\n";
+	}
+
+	// Wrap swapchain images with IMAGE VIEWS and prepare data for RENDERPASS:
+	mSwapchainImageViews.resize(mSwapchainConfig.swapchainImages.size());
+
+	std::vector<vk::AttachmentDescription> attachmentDescriptions;
+	// Layout transitions for all color attachments in here:
+	std::vector<vk::AttachmentReference> colorAttachmentsInSubpass0;
+	// Layout transitions for all depth attachments in here:
+	std::vector<vk::AttachmentReference> depthAttachmentsInSubpass0;
+
+	for (size_t i = 0; i < mSwapchainConfig.swapchainImages.size(); ++i) {
+		std::vector<VklSwapchainImageDetails> attachments_0;
+		if (mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) { attachments_0.push_back(mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails); }
+		if (mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) { attachments_0.push_back(mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails); }
+
+		auto hasColorAttachment = mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE;
+		auto hasDepthAttachment = mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE;
+		std::vector<VklSwapchainImageDetails> attachments_i;
+		if (hasColorAttachment) { attachments_i.push_back(mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails); }
+		if (hasDepthAttachment) { attachments_i.push_back(mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails); }
+		mSwapchainImageViews[i] = std::vector<vk::ImageView>(attachments_i.size());
+
+		// Sanity check:
+		if ((mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) != (mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE)) {
+			VKL_EXIT_WITH_ERROR(std::string("If one VklSwapchainFramebufferComposition entry has a valid color image handle set, all other VklSwapchainFramebufferComposition entries must have valid color image handles set, too. However, swapchainImages[0] has a ")
+				+ ((mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid" : "invalid")
+				+ " handle, while swapchainImages[" + std::to_string(i) + "] has a "
+				+ ((mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid handle" : "invalid handle"));
+		}
+		if ((mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) != (mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE)) {
+			VKL_EXIT_WITH_ERROR(std::string("If one VklSwapchainFramebufferComposition entry has a valid depth image handle set, all other VklSwapchainFramebufferComposition entries must have valid depth image handles set, too. However, swapchainImages[0] has a ")
+				+ ((mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid" : "invalid")
+				+ " handle, while swapchainImages[" + std::to_string(i) + "]  has a "
+				+ ((mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid handle" : "invalid handle"));
+		}
+		if (attachments_0.size() != attachments_i.size()) {
+			VKL_EXIT_WITH_ERROR("attachments_0.size() != attachments_i.size()");
+		}
+
+		mClearValues.emplace_back();
+		auto& currentClearValues = mClearValues.back();
+
+		for (size_t j = 0; j < attachments_i.size(); ++j) {
+
+			// Sanity checks:
+			if (attachments_i[j].imageFormat != attachments_0[j].imageFormat) {
+				VKL_EXIT_WITH_ERROR("Corresponding VklSwapchainImageDetails::imageFormat entries must be set to the same formats! However, element[" + std::to_string(i) + ", " + std::to_string(j) + "] is set to "
+					+ vk::to_string(static_cast<vk::Format>(attachments_i[j].imageFormat)) + ", while element[0, " + std::to_string(j) + "] is set to " + vk::to_string(static_cast<vk::Format>(attachments_0[j].imageFormat)));
+			}
+			if (attachments_i[j].imageUsage != attachments_0[j].imageUsage) {
+				VKL_EXIT_WITH_ERROR("Corresponding VklSwapchainImageDetails::imageUsage entries must be set to the same values! However, element[" + std::to_string(i) + ", " + std::to_string(j) + "] is set to "
+					+ vk::to_string(static_cast<vk::ImageUsageFlags>(attachments_i[j].imageUsage)) + ", while element[0, " + std::to_string(j) + "] is set to " + vk::to_string(static_cast<vk::ImageUsageFlags>(attachments_0[j].imageUsage)));
+			}
+
+			// Create the views:
+			if ((VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0) {
+				// Create a view for a depth buffer:
+				mSwapchainImageViews[i][j] = mDevice.createImageView(vk::ImageViewCreateInfo{
+					{}, vk::Image{attachments_i[j].imageHandle },
+						vk::ImageViewType::e2D, static_cast<vk::Format>(attachments_i[j].imageFormat),
+						vk::ComponentMapping{},
+						vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eDepth, 0u, 1u, 0u, 1u }
+				});
+			}
+			else {
+				// Create a view for a color buffer:
+				mSwapchainImageViews[i][j] = mDevice.createImageView(vk::ImageViewCreateInfo{
+					{}, vk::Image{ attachments_i[j].imageHandle },
+						vk::ImageViewType::e2D, static_cast<vk::Format>(attachments_i[j].imageFormat),
+						vk::ComponentMapping{},
+						vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u }
+				});
+			}
+
+			// Gather information for the renderpass already:
+			if (0 == i) {
+				auto curAttachmentIndex = static_cast<uint32_t>(attachmentDescriptions.size());
+
+				attachmentDescriptions.emplace_back(vk::AttachmentDescription{}
+				.setFormat(static_cast<vk::Format>(attachments_i[j].imageFormat))
+					.setLoadOp(vk::AttachmentLoadOp::eClear)		// What do do with the image when the renderpass starts? => Make sure that we have cleared the content of previous frames!
+					.setStoreOp( // What to do with the image when the renderpass has finished? => We don't need the depth buffer for anything afterwards.
+						(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0
+						? vk::AttachmentStoreOp::eDontCare
+						: vk::AttachmentStoreOp::eStore)
+					.setInitialLayout(vk::ImageLayout::eUndefined)	// When the renderpass starts, in which layout will the image be? => We don't care since we're clearing it.
+					.setFinalLayout( // When the renderpass finishes, in which layout shall the image be transfered? => The image shall be presented directly afterwards. 
+						(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0
+						? vk::ImageLayout::eDepthStencilAttachmentOptimal // When the renderpass finishes, in which layout shall the image be transferred? => It will be in eDepthStencilAttachmentOptimal layout anyways.
+						: vk::ImageLayout::ePresentSrcKHR)
+					.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+					.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+					);
+
+				if ((VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0) {
+					depthAttachmentsInSubpass0.emplace_back(curAttachmentIndex, vk::ImageLayout::eDepthStencilAttachmentOptimal); // Describes the index (w.r.t. attachmentDescriptions) and the desired layout of the depth attachment for subpass 0
+				}
+				else {
+					colorAttachmentsInSubpass0.emplace_back(curAttachmentIndex, vk::ImageLayout::eColorAttachmentOptimal); // Describes the index (w.r.t. attachmentDescriptions) and the desired layout of the color attachment for subpass 0
+				}
+			}
+
+			currentClearValues.emplace_back(*reinterpret_cast<vk::ClearValue*>(&attachments_i[j].clearValue));
+		}
+	}
+
+	mHasDepthAttachments = !depthAttachmentsInSubpass0.empty();
+
+	// Create the RENDERPASS:
+	// ad 2) Describe per subpass for each attachment how it is going to be used, and into which layout it shall be transferred
+	auto subpassDescription = vk::SubpassDescription{}
+		.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Despite looking as if it was configurable, only eGraphics is valid/supported
+		.setColorAttachmentCount(static_cast<uint32_t>(colorAttachmentsInSubpass0.size()))
+		.setPColorAttachments(colorAttachmentsInSubpass0.data());
+	if (mHasDepthAttachments) {
+		subpassDescription.setPDepthStencilAttachment(depthAttachmentsInSubpass0.data());
+	}
+
+	// In any case, prepare for potential device transfers (we wouldn't need it for host coherent buffers, which are made available on queue submission)
+	mSrcStages0 = vk::PipelineStageFlagBits::eTransfer;
+	mSrcAccess0 = vk::AccessFlagBits::eTransferWrite;
+	// In any case, we must wait for such potential transfers in fragment shaders, where we're using the buffers
+	mDstStages0 = vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	mDstAccess0 = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eColorAttachmentWrite;
+	// If we have depth attachments, prepare for the case where one single depth image is used for all framebuffers in flight:
+	// (For further details, see here: https://stackoverflow.com/questions/62371266/why-is-a-single-depth-buffer-sufficient-for-this-vulkan-swapchain-render-loop/62398311#62398311)
+	if (mHasDepthAttachments) {
+		mSrcStages0 |= (vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		mSrcAccess0 |= (vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+		mDstStages0 |= (vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
+		mDstAccess0 |= (vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+	}
+	// We don't really need to synchronize on the COLOR_ATTACHMENT_OUTPUT stage since actually our fences ensure that we do not reuse the same swap chain image.
+	// Therefore, this should be fine.
+
+	// ad 3) Describe execution and memory dependencies (just in the same way as with pipeline barriers).
+	//        In this case, we only have external dependencies: One with whatever comes before we are using
+	//        this renderpass, and another with whatever comes after this renderpass in a queue.
+	std::array<vk::SubpassDependency, 2> subpassDependencies{
+		vk::SubpassDependency{}
+		// Establish proper dependencies with whatever comes before (which is the imageAvailableSemaphore wait and then the command buffer that copies an explosion image to the swapchain image):
+		.setSrcSubpass(VK_SUBPASS_EXTERNAL) /* -> */ .setDstSubpass(0u)
+			.setSrcStageMask(mSrcStages0) /* -> */ .setDstStageMask(mDstStages0)
+			.setSrcAccessMask(mSrcAccess0) /* -> */ .setDstAccessMask(mDstAccess0)
+			, vk::SubpassDependency{}
+		// Establish proper dependencies with whatever comes after (which is the renderFinishedSemaphore signal):
+		.setSrcSubpass(0u) /* -> */ .setDstSubpass(VK_SUBPASS_EXTERNAL)
+			//     Execution may continue as soon as the eColorAttachmentOutput stage is done.
+			//     However, nothing must really wait on that stage, because afterwards comes the semaphore. Hence, eBottomOfPipe.
+			.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput) /* -> */ .setDstStageMask(vk::PipelineStageFlagBits::eBottomOfPipe)
+			//     The graphics pipeline is performing eColorAttachmentWrites. These need to be made available.
+			//     We don't have to make them visible to anything, because the semaphore performs a full memory barrier anyways. 
+			.setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite) /* -> */ .setDstAccessMask(vk::AccessFlags{})
+	};
+
+	auto renderpassCreateInfo = vk::RenderPassCreateInfo{}
+		.setAttachmentCount(static_cast<uint32_t>(attachmentDescriptions.size()))
+		.setPAttachments(attachmentDescriptions.data())
+		.setSubpassCount(1u)
+		.setPSubpasses(&subpassDescription)
+		.setDependencyCount(static_cast<uint32_t>(subpassDependencies.size()))
+		.setPDependencies(subpassDependencies.data());
+	mRenderpass = mDevice.createRenderPassUnique(renderpassCreateInfo, nullptr, mDispatchLoader);
+
+	// Create the FRAMEBUFFERS
+	mFramebuffers.reserve(mSwapchainImageViews.size());
+	for (const auto& set : mSwapchainImageViews) {
+		auto framebufferCreateInfo = vk::FramebufferCreateInfo{}
+			.setRenderPass(mRenderpass.get())
+			.setAttachmentCount(static_cast<uint32_t>(set.size()))
+			.setPAttachments(set.data())
+			.setWidth(mSwapchainConfig.imageExtent.width)
+			.setHeight(mSwapchainConfig.imageExtent.height)
+			.setLayers(1u);
+
+		mFramebuffers.push_back(mDevice.createFramebufferUnique(framebufferCreateInfo, nullptr, mDispatchLoader));
+	}
+}
+
+void vklDestroyRenderResources()
+{
+	mFramebuffers.clear();
+	mRenderpass.reset();
+	for (const auto& set : mSwapchainImageViews) {
+		for (const auto& view : set) {
+			mDevice.destroyImageView(view);
+		}
+	}
+	mSwapchainImageViews.clear();
 }
 
 bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysicalDevice vk_physical_device, VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig& swapchain_config)
@@ -1113,203 +1328,19 @@ bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysica
 	mDevice = vk::Device{ vk_device };
 	mDispatchLoader = vk::DispatchLoaderStatic();
 	mQueue = vk::Queue{ vk_queue };
-	mSwapchainConfig = swapchain_config;
 
 	// Create a DYNAMIC DISPATCH LOADER:
 	mDynamicDispatch = vk::DispatchLoaderDynamic{ static_cast<VkInstance>(mInstance), vkGetInstanceProcAddr };
-	
+
 	// Test instance and add DEBUG UTILS MESSENGER:
 	mDebugUtilsMessenger = mInstance.createDebugUtilsMessengerEXT(vk::DebugUtilsMessengerCreateInfoEXT{
 		vk::DebugUtilsMessengerCreateFlagsEXT{},
-		vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo,
-		vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
-		DebugUtilsMessengerCallback, nullptr
+			vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo,
+			vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
+			DebugUtilsMessengerCallback, nullptr
 	}, nullptr, mDynamicDispatch);
 
-	// See if we can get some information about the surface:
-	auto surfaceCapabilities = mPhysicalDevice.getSurfaceCapabilitiesKHR(mSurface);
-
-	// Get swapchain image extents:
-	if (swapchain_config.imageExtent.width != surfaceCapabilities.currentExtent.width || swapchain_config.imageExtent.height != surfaceCapabilities.currentExtent.height) {
-		std::cout << "WARNING: Swapchain config's extents[" << swapchain_config.imageExtent.width << "x" << swapchain_config.imageExtent.height << "] do not match the surface capabilities' extents[" << surfaceCapabilities.currentExtent.width << "x" << surfaceCapabilities.currentExtent.height << "]" << VKL_DESCRIBE_FILE_LOCATION_FOR_OUT_STREAM << "\n";
-	}
-	
-	// Wrap swapchain images with IMAGE VIEWS and prepare data for RENDERPASS:
-	mSwapchainImageViews.resize(mSwapchainConfig.swapchainImages.size());
-
-	std::vector<vk::AttachmentDescription> attachmentDescriptions;
-	// Layout transitions for all color attachments in here:
-	std::vector<vk::AttachmentReference> colorAttachmentsInSubpass0;
-	// Layout transitions for all depth attachments in here:
-	std::vector<vk::AttachmentReference> depthAttachmentsInSubpass0;
-
-	for (size_t i = 0; i < mSwapchainConfig.swapchainImages.size(); ++i) {
-		std::vector<VklSwapchainImageDetails> attachments_0;
-		if (mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) { attachments_0.push_back(mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails); }
-		if (mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) { attachments_0.push_back(mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails); }
-
-		auto hasColorAttachment = mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE;
-		auto hasDepthAttachment = mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE;
-		std::vector<VklSwapchainImageDetails> attachments_i;
-		if (hasColorAttachment) { attachments_i.push_back(mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails); }
-		if (hasDepthAttachment) { attachments_i.push_back(mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails); }
-		mSwapchainImageViews[i] = std::vector<vk::ImageView>(attachments_i.size());
-
-		// Sanity check:
-		if ((mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) != (mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE)) {
-			VKL_EXIT_WITH_ERROR(std::string("If one VklSwapchainFramebufferComposition entry has a valid color image handle set, all other VklSwapchainFramebufferComposition entries must have valid color image handles set, too. However, swapchainImages[0] has a ")
-                                + ((mSwapchainConfig.swapchainImages[0].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid" : "invalid")
-                                + " handle, while swapchainImages[" + std::to_string(i) + "] has a "
-                                + ((mSwapchainConfig.swapchainImages[i].colorAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid handle" : "invalid handle"));
-		}
-		if ((mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) != (mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE)) {
-			VKL_EXIT_WITH_ERROR(std::string("If one VklSwapchainFramebufferComposition entry has a valid depth image handle set, all other VklSwapchainFramebufferComposition entries must have valid depth image handles set, too. However, swapchainImages[0] has a ")
-                                + ((mSwapchainConfig.swapchainImages[0].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid" : "invalid")
-                                + " handle, while swapchainImages[" + std::to_string(i) + "]  has a "
-                                + ((mSwapchainConfig.swapchainImages[i].depthAttachmentImageDetails.imageHandle != VK_NULL_HANDLE) ? "valid handle" : "invalid handle"));
-		}
-		if (attachments_0.size() != attachments_i.size()) {
-			VKL_EXIT_WITH_ERROR("attachments_0.size() != attachments_i.size()");
-		}
-
-		mClearValues.emplace_back();
-		auto& currentClearValues = mClearValues.back();
-
-		for (size_t j = 0; j < attachments_i.size(); ++j) {
-
-			// Sanity checks:
-			if (attachments_i[j].imageFormat != attachments_0[j].imageFormat) {
-				VKL_EXIT_WITH_ERROR("Corresponding VklSwapchainImageDetails::imageFormat entries must be set to the same formats! However, element[" + std::to_string(i) + ", " + std::to_string(j) + "] is set to "
-                                    + vk::to_string(static_cast<vk::Format>(attachments_i[j].imageFormat)) + ", while element[0, " + std::to_string(j) + "] is set to " + vk::to_string(static_cast<vk::Format>(attachments_0[j].imageFormat)));
-			}
-			if (attachments_i[j].imageUsage != attachments_0[j].imageUsage) {
-				VKL_EXIT_WITH_ERROR("Corresponding VklSwapchainImageDetails::imageUsage entries must be set to the same values! However, element[" + std::to_string(i) + ", " + std::to_string(j) + "] is set to "
-                                    + vk::to_string(static_cast<vk::ImageUsageFlags>(attachments_i[j].imageUsage)) + ", while element[0, " + std::to_string(j) + "] is set to " + vk::to_string(static_cast<vk::ImageUsageFlags>(attachments_0[j].imageUsage)));
-			}
-
-			// Create the views:
-			if ((VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0) {
-				// Create a view for a depth buffer:
-				mSwapchainImageViews[i][j] = mDevice.createImageView(vk::ImageViewCreateInfo{
-					{}, vk::Image{attachments_i[j].imageHandle },
-					vk::ImageViewType::e2D, static_cast<vk::Format>(attachments_i[j].imageFormat),
-					vk::ComponentMapping{},
-					vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eDepth, 0u, 1u, 0u, 1u }
-				});
-			}
-			else {
-				// Create a view for a color buffer:
-				mSwapchainImageViews[i][j] = mDevice.createImageView(vk::ImageViewCreateInfo{
-					{}, vk::Image{ attachments_i[j].imageHandle },
-					vk::ImageViewType::e2D, static_cast<vk::Format>(attachments_i[j].imageFormat),
-					vk::ComponentMapping{},
-					vk::ImageSubresourceRange{ vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u }
-				});
-			}
-			
-			// Gather information for the renderpass already:
-			if (0 == i) {
-				auto curAttachmentIndex = static_cast<uint32_t>(attachmentDescriptions.size());
-
-				attachmentDescriptions.emplace_back(vk::AttachmentDescription{}
-					.setFormat(static_cast<vk::Format>(attachments_i[j].imageFormat))
-					.setLoadOp(vk::AttachmentLoadOp::eClear)		// What do do with the image when the renderpass starts? => Make sure that we have cleared the content of previous frames!
-					.setStoreOp( // What to do with the image when the renderpass has finished? => We don't need the depth buffer for anything afterwards.
-						(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0
-						? vk::AttachmentStoreOp::eDontCare
-						: vk::AttachmentStoreOp::eStore)
-					.setInitialLayout(vk::ImageLayout::eUndefined)	// When the renderpass starts, in which layout will the image be? => We don't care since we're clearing it.
-					.setFinalLayout( // When the renderpass finishes, in which layout shall the image be transfered? => The image shall be presented directly afterwards. 
-						(VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0
-						? vk::ImageLayout::eDepthStencilAttachmentOptimal // When the renderpass finishes, in which layout shall the image be transferred? => It will be in eDepthStencilAttachmentOptimal layout anyways.
-						: vk::ImageLayout::ePresentSrcKHR)
-					.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-					.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-				);
-				
-				if ((VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT & attachments_i[j].imageUsage) != 0) {
-					depthAttachmentsInSubpass0.emplace_back(curAttachmentIndex, vk::ImageLayout::eDepthStencilAttachmentOptimal); // Describes the index (w.r.t. attachmentDescriptions) and the desired layout of the depth attachment for subpass 0
-				}
-				else {
-					colorAttachmentsInSubpass0.emplace_back(curAttachmentIndex, vk::ImageLayout::eColorAttachmentOptimal); // Describes the index (w.r.t. attachmentDescriptions) and the desired layout of the color attachment for subpass 0
-				}
-			}
-
-			currentClearValues.emplace_back(*reinterpret_cast<vk::ClearValue*>(&attachments_i[j].clearValue));
-		}
-	}
-
-	mHasDepthAttachments = !depthAttachmentsInSubpass0.empty();
-
-	// Create the RENDERPASS:
-	// ad 2) Describe per subpass for each attachment how it is going to be used, and into which layout it shall be transferred
-	auto subpassDescription = vk::SubpassDescription{}
-		.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Despite looking as if it was configurable, only eGraphics is valid/supported
-		.setColorAttachmentCount(static_cast<uint32_t>(colorAttachmentsInSubpass0.size()))
-		.setPColorAttachments(colorAttachmentsInSubpass0.data());
-	if (mHasDepthAttachments) {
-		subpassDescription.setPDepthStencilAttachment(depthAttachmentsInSubpass0.data());
-	}
-
-	// In any case, prepare for potential device transfers (we wouldn't need it for host coherent buffers, which are made available on queue submission)
-	mSrcStages0 = vk::PipelineStageFlagBits::eTransfer;
-	mSrcAccess0 = vk::AccessFlagBits::eTransferWrite;
-	// In any case, we must wait for such potential transfers in fragment shaders, where we're using the buffers
-	mDstStages0 = vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eColorAttachmentOutput;
-	mDstAccess0 = vk::AccessFlagBits::eShaderRead            | vk::AccessFlagBits::eColorAttachmentWrite        ;
-	// If we have depth attachments, prepare for the case where one single depth image is used for all framebuffers in flight:
-	// (For further details, see here: https://stackoverflow.com/questions/62371266/why-is-a-single-depth-buffer-sufficient-for-this-vulkan-swapchain-render-loop/62398311#62398311)
-	if (mHasDepthAttachments) {
-		mSrcStages0 |= (vk::PipelineStageFlagBits::eEarlyFragmentTests | vk::PipelineStageFlagBits::eLateFragmentTests);
-		mSrcAccess0 |= (vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-		mDstStages0 |= (vk::PipelineStageFlagBits::eEarlyFragmentTests  | vk::PipelineStageFlagBits::eLateFragmentTests   );
-		mDstAccess0 |= (vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-	}
-	// We don't really need to synchronize on the COLOR_ATTACHMENT_OUTPUT stage since actually our fences ensure that we do not reuse the same swap chain image.
-	// Therefore, this should be fine.
-
-	// ad 3) Describe execution and memory dependencies (just in the same way as with pipeline barriers).
-	//        In this case, we only have external dependencies: One with whatever comes before we are using
-	//        this renderpass, and another with whatever comes after this renderpass in a queue.
-	std::array<vk::SubpassDependency, 2> subpassDependencies{
-		vk::SubpassDependency{}
-			// Establish proper dependencies with whatever comes before (which is the imageAvailableSemaphore wait and then the command buffer that copies an explosion image to the swapchain image):
-			.setSrcSubpass(VK_SUBPASS_EXTERNAL) /* -> */ .setDstSubpass(0u)
-			.setSrcStageMask(mSrcStages0) /* -> */ .setDstStageMask(mDstStages0)
-			.setSrcAccessMask(mSrcAccess0) /* -> */ .setDstAccessMask(mDstAccess0)
-	,	vk::SubpassDependency{}
-			// Establish proper dependencies with whatever comes after (which is the renderFinishedSemaphore signal):
-			.setSrcSubpass(0u) /* -> */ .setDstSubpass(VK_SUBPASS_EXTERNAL)
-			//     Execution may continue as soon as the eColorAttachmentOutput stage is done.
-			//     However, nothing must really wait on that stage, because afterwards comes the semaphore. Hence, eBottomOfPipe.
-			.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput) /* -> */ .setDstStageMask(vk::PipelineStageFlagBits::eBottomOfPipe)
-			//     The graphics pipeline is performing eColorAttachmentWrites. These need to be made available.
-			//     We don't have to make them visible to anything, because the semaphore performs a full memory barrier anyways. 
-			.setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite) /* -> */ .setDstAccessMask(vk::AccessFlags{})
-	};
-
-	auto renderpassCreateInfo = vk::RenderPassCreateInfo{}
-		.setAttachmentCount(static_cast<uint32_t>(attachmentDescriptions.size()))
-		.setPAttachments(attachmentDescriptions.data())
-		.setSubpassCount(1u)
-		.setPSubpasses(&subpassDescription)
-		.setDependencyCount(static_cast<uint32_t>(subpassDependencies.size()))
-		.setPDependencies(subpassDependencies.data());
-	mRenderpass = mDevice.createRenderPassUnique(renderpassCreateInfo, nullptr, mDispatchLoader);
-
-	// Create the FRAMEBUFFERS
-	mFramebuffers.reserve(mSwapchainImageViews.size());
-	for (const auto& set : mSwapchainImageViews) {
-		auto framebufferCreateInfo = vk::FramebufferCreateInfo{}
-			.setRenderPass(mRenderpass.get())
-			.setAttachmentCount(static_cast<uint32_t>(set.size()))
-			.setPAttachments(set.data())
-			.setWidth(mSwapchainConfig.imageExtent.width)
-			.setHeight(mSwapchainConfig.imageExtent.height)
-			.setLayers(1u);
-
-		mFramebuffers.push_back(mDevice.createFramebufferUnique(framebufferCreateInfo, nullptr, mDispatchLoader));
-	}
+	vklCreateRenderResources(swapchain_config);
 
 	// Create SEMAPHORES and FENCES, and also prepare the safety-vector of FENCES
 	for (size_t i = 0; i < CONCURRENT_FRAMES; ++i) {
@@ -1322,7 +1353,7 @@ bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysica
 	mFrameId = -1;
 	// We have to make sure that not more than #CONCURRENT_FRAMES are in flight at the same time. We can use fences to ensure that. 
 	mFrameInFlightIndex = -1; // Initialize
-	
+
 #ifdef USE_GLSLANG
 	glslang_initialize_process();
 #endif
@@ -1353,15 +1384,15 @@ bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysica
 
 	// Create a default COMMAND POOL which command buffers will be allocated from during vklStartRecordingCommands()
 	mCommandPool = mDevice.createCommandPoolUnique(vk::CommandPoolCreateInfo{ vk::CommandPoolCreateFlagBits::eTransient }, nullptr, mDispatchLoader);
-	
+
 	mFrameworkInitialized = true;
 	return mFrameworkInitialized;
 }
 
 #ifdef VKL_HAS_VMA
 bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysicalDevice vk_physical_device,
-                      VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig &swapchain_config,
-                      VmaAllocator vma_allocator)
+	VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig& swapchain_config,
+	VmaAllocator vma_allocator)
 {
 	bool err = vklInitFramework(vk_instance, vk_surface, vk_physical_device, vk_device, vk_queue, swapchain_config);
 
@@ -1371,7 +1402,7 @@ bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysica
 	mVmaAllocator = vma_allocator;
 	return err;
 }
-#endif 
+#endif
 
 bool vklFrameworkInitialized()
 {
@@ -1400,21 +1431,15 @@ void vklDestroyFramework()
 		mRenderFinishedSemaphores[i].reset();
 		mImageAvailableSemaphores[i].reset();
 	}
-	mFramebuffers.clear();
-	mRenderpass.reset();
-	for (const auto& set : mSwapchainImageViews) {
-		for (const auto& view : set) {
-			mDevice.destroyImageView(view);
-		}
-	}
-	mSwapchainImageViews.clear();
+
+	vklDestroyRenderResources();
 
 	mInstance.destroyDebugUtilsMessengerEXT(mDebugUtilsMessenger, nullptr, mDynamicDispatch);
 	mDebugUtilsMessenger = nullptr;
 }
 
 // Delete those pipelines which are no longer used due having been replaced after hot reloading
-void destroyOutdatedPipelines() 
+void destroyOutdatedPipelines()
 {
 	while (!mPipelineGraveyard.empty() && std::get<0>(*mPipelineGraveyard.begin()) < mFrameId) {
 		destroyGraphicsPipelineInternal(std::get<1>(*mPipelineGraveyard.begin()));
@@ -1464,13 +1489,13 @@ double vklWaitForNextSwapchainImage()
 	// Submit a "fake" work package to the queue in order to wait for the image to become available before starting to render into it:
 	mQueue.submit({ vk::SubmitInfo{}
 		.setWaitSemaphoreCount(1u)
-		// Wait for the image to become available:
-		.setPWaitSemaphores(&mImageAvailableSemaphores[mFrameInFlightIndex].get())
-		.setPWaitDstStageMask(&mDstStages0) // It's the same destination stages that must wait on the image to become available.
-		.setCommandBufferCount(0u) // Submit ZERO command buffers :O
-		// We don't signal anything here:
-		.setSignalSemaphoreCount(0u)
-	});
+			// Wait for the image to become available:
+			.setPWaitSemaphores(&mImageAvailableSemaphores[mFrameInFlightIndex].get())
+			.setPWaitDstStageMask(&mDstStages0) // It's the same destination stages that must wait on the image to become available.
+			.setCommandBufferCount(0u) // Submit ZERO command buffers :O
+			// We don't signal anything here:
+			.setSignalSemaphoreCount(0u)
+		});
 
 	auto t1 = glfwGetTime();
 	return t1 - t0;
@@ -1491,7 +1516,7 @@ void vklPresentCurrentSwapchainImage()
 		.setSignalSemaphoreCount(1u)
 		.setPSignalSemaphores(&mRenderFinishedSemaphores[mFrameInFlightIndex].get())
 		// Also signal a fence so that the CPU does not run ahead of the GPU:
-	}, mSyncHostWithDeviceFence[mFrameInFlightIndex].get());
+		}, mSyncHostWithDeviceFence[mFrameInFlightIndex].get());
 
 	// Now present the image as soon as the render finished semaphore has been signaled:
 	auto swapchainHandle = vk::SwapchainKHR{ mSwapchainConfig.swapchainHandle };
@@ -1501,9 +1526,16 @@ void vklPresentCurrentSwapchainImage()
 		.setSwapchainCount(1u)
 		.setPSwapchains(&swapchainHandle)
 		.setPImageIndices(&mCurrentSwapChainImageIndex);
-	
-	vk::Result returnCode = mQueue.presentKHR(presentInfo);
-	VKL_CHECK_VULKAN_ERROR(static_cast<VkResult>(returnCode));
+
+	auto returnCode = static_cast<VkResult>(mQueue.presentKHR(presentInfo));
+	if (returnCode == VK_SUBOPTIMAL_KHR || returnCode == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		mResized = true;
+	}
+	else if (returnCode != VK_SUCCESS)
+	{
+		VKL_EXIT_WITH_ERROR("Failed to submit present command buffer");
+	}
 
 	mImagesInFlightFenceIndices[mCurrentSwapChainImageIndex] = mFrameInFlightIndex;
 }
@@ -1517,30 +1549,30 @@ void vklStartRecordingCommands()
 	// Clean up old command buffers:
 	auto numToErase = static_cast<size_t>(std::max(int{ 0 }, static_cast<int>(mSingleUseCommandBuffers.size()) - std::max(static_cast<int>(mSwapchainImageViews.size()), int{ CONCURRENT_FRAMES })));
 	assert(numToErase <= mSingleUseCommandBuffers.size());
-	assert(numToErase <  mSingleUseCommandBuffers.size() || mFrameId < 10); // <-- Must be strictly smaller in later frames
+	assert(numToErase < mSingleUseCommandBuffers.size() || mFrameId < 10); // <-- Must be strictly smaller in later frames
 	mSingleUseCommandBuffers.erase(std::begin(mSingleUseCommandBuffers), std::begin(mSingleUseCommandBuffers) + numToErase);
 
 	// Create a new command buffer for this frame:
 	auto tmp = mDevice.allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{
-			mCommandPool.get(),
+		mCommandPool.get(),
 			vk::CommandBufferLevel::ePrimary,
 			1u
-		}, 
+	},
 		mDispatchLoader
 	);
 	assert(!tmp.empty());
 
 	mSingleUseCommandBuffers.push_back(std::move(tmp[0]));
 	auto& cb = mSingleUseCommandBuffers.back().get();
-	
+
 	// Start recording:
 	cb.begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
 
 	cb.beginRenderPass(vk::RenderPassBeginInfo{
 		mRenderpass.get(), mFramebuffers[mCurrentSwapChainImageIndex].get(),
-		vk::Rect2D{vk::Offset2D{0, 0}, mSwapchainConfig.imageExtent},
-		static_cast<uint32_t>(mClearValues[mCurrentSwapChainImageIndex].size()), mClearValues[mCurrentSwapChainImageIndex].data()
-		}, vk::SubpassContents::eInline);
+			vk::Rect2D{vk::Offset2D{0, 0}, mSwapchainConfig.imageExtent},
+			static_cast<uint32_t>(mClearValues[mCurrentSwapChainImageIndex].size()), mClearValues[mCurrentSwapChainImageIndex].data()
+	}, vk::SubpassContents::eInline);
 }
 
 void vklEndRecordingCommands()
@@ -1552,7 +1584,7 @@ void vklEndRecordingCommands()
 		VKL_EXIT_WITH_ERROR("There are no command buffers which could be recording.Have you called vklStartRecordingCommands beforehand?");
 	}
 	const auto& cb = mSingleUseCommandBuffers.back().get();
-	
+
 	cb.endRenderPass();
 
 	// Stop recording:
@@ -1561,7 +1593,7 @@ void vklEndRecordingCommands()
 	mQueue.submit({ vk::SubmitInfo{}
 						.setCommandBufferCount(1u)
 						.setPCommandBuffers(&cb)
-					});
+		});
 }
 
 uint32_t vklGetCurrentSwapChainImageIndex()
@@ -1574,7 +1606,7 @@ uint32_t vklGetNumFramebuffers()
 }
 uint32_t vklGetNumClearValues()
 {
-  return static_cast<uint32_t>(mClearValues.size());
+	return static_cast<uint32_t>(mClearValues.size());
 }
 VkFramebuffer vklGetFramebuffer(uint32_t i)
 {
@@ -1593,7 +1625,7 @@ VkRenderPass vklGetRenderpass()
 }
 VkCommandBuffer vklGetCurrentCommandBuffer()
 {
-	if(mSingleUseCommandBuffers.empty()) {
+	if (mSingleUseCommandBuffers.empty()) {
 		VKL_EXIT_WITH_ERROR("There are no command buffers. Have you called vklStartRecordingCommands beforehand?");
 	}
 	const auto& cb = mSingleUseCommandBuffers.back().get();
@@ -1602,12 +1634,12 @@ VkCommandBuffer vklGetCurrentCommandBuffer()
 
 VkPipeline vklGetBasicPipeline()
 {
-    return static_cast<VkPipeline>(mBasicPipeline);
+	return static_cast<VkPipeline>(mBasicPipeline);
 }
 
 VkDevice vklGetDevice()
 {
-  return static_cast<VkDevice>(mDevice);
+	return static_cast<VkDevice>(mDevice);
 }
 
 VkImage vklCreateDeviceLocalImageWithBackingMemory(VkPhysicalDevice physical_device, VkDevice device, uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage_flags, uint32_t array_layers, VkImageCreateFlags flags)
@@ -1645,42 +1677,42 @@ VkImage vklCreateDeviceLocalImageWithBackingMemory(VkPhysicalDevice physical_dev
 	auto memoryAllocInfo = vk::MemoryAllocateInfo{}
 		.setAllocationSize(memoryRequirements.size)
 		.setMemoryTypeIndex([&]() {
-			// Get memory types supported by the physical device:
-			auto memoryProperties = vk::PhysicalDevice{ physical_device }.getMemoryProperties();
+		// Get memory types supported by the physical device:
+		auto memoryProperties = vk::PhysicalDevice{ physical_device }.getMemoryProperties();
 
-			// In search for a suitable memory type INDEX:
-			int selectedMemIndex = -1;
-			vk::DeviceSize selectedHeapSize = 0;
-			for (int i = 0; i < static_cast<int>(memoryProperties.memoryTypeCount); ++i) {
+		// In search for a suitable memory type INDEX:
+		int selectedMemIndex = -1;
+		vk::DeviceSize selectedHeapSize = 0;
+		for (int i = 0; i < static_cast<int>(memoryProperties.memoryTypeCount); ++i) {
 
-				// Is this kind of memory suitable for our image?
-				const auto bitmask = memoryRequirements.memoryTypeBits;
-				const auto bit = 1 << i;
-				if (0 == (bitmask & bit)) {
-					continue; // => nope
-				}
-
-				// Does this kind of memory support our usage requirements?
-
-				// In contrast to our host-coherent buffers, we just assume that we want all our images to live in device memory:
-				if ((memoryProperties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags{}) {
-					// Would support => now select the one with the largest heap:
-					const auto heapSize = memoryProperties.memoryHeaps[memoryProperties.memoryTypes[i].heapIndex].size;
-					if (heapSize > selectedHeapSize) {
-						// We have a new king:
-						selectedMemIndex = i;
-						selectedHeapSize = heapSize;
-					}
-				}
+			// Is this kind of memory suitable for our image?
+			const auto bitmask = memoryRequirements.memoryTypeBits;
+			const auto bit = 1 << i;
+			if (0 == (bitmask & bit)) {
+				continue; // => nope
 			}
 
-			if (-1 == selectedMemIndex) {
-				VKL_EXIT_WITH_ERROR(std::string("ERROR: Couldn't find suitable memory for image, requirements[") + std::to_string(memoryRequirements.alignment) + ", " + std::to_string(memoryRequirements.memoryTypeBits) + ", " + std::to_string(memoryRequirements.size) + "]");
-			}
+			// Does this kind of memory support our usage requirements?
 
-			// all good, we found a suitable memory index:
-			return static_cast<uint32_t>(selectedMemIndex);
-		}());
+			// In contrast to our host-coherent buffers, we just assume that we want all our images to live in device memory:
+			if ((memoryProperties.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) != vk::MemoryPropertyFlags{}) {
+				// Would support => now select the one with the largest heap:
+				const auto heapSize = memoryProperties.memoryHeaps[memoryProperties.memoryTypes[i].heapIndex].size;
+				if (heapSize > selectedHeapSize) {
+					// We have a new king:
+					selectedMemIndex = i;
+					selectedHeapSize = heapSize;
+				}
+			}
+		}
+
+		if (-1 == selectedMemIndex) {
+			VKL_EXIT_WITH_ERROR(std::string("ERROR: Couldn't find suitable memory for image, requirements[") + std::to_string(memoryRequirements.alignment) + ", " + std::to_string(memoryRequirements.memoryTypeBits) + ", " + std::to_string(memoryRequirements.size) + "]");
+		}
+
+		// all good, we found a suitable memory index:
+		return static_cast<uint32_t>(selectedMemIndex);
+			}());
 
 	auto memory = vk::Device{ device }.allocateMemoryUnique(memoryAllocInfo, nullptr, mDispatchLoader);
 
@@ -1872,7 +1904,7 @@ VklImageInfo vklGetDdsImageLevelInfo(const char* file, uint32_t level)
 		// Furthermore, assume just UNORM, but could also be sRGB... who knows?!
 		// TODO: Test if sRGB looks better than UNORM!
 	case FOURCC_DXT1:
-		info.imageFormat= VK_FORMAT_BC1_RGBA_UNORM_BLOCK; // TODO: maybe VK_FORMAT_BC1_RGBA_SRGB_BLOCK?
+		info.imageFormat = VK_FORMAT_BC1_RGBA_UNORM_BLOCK; // TODO: maybe VK_FORMAT_BC1_RGBA_SRGB_BLOCK?
 		break;
 	case FOURCC_DXT3:
 		info.imageFormat = VK_FORMAT_BC2_UNORM_BLOCK; // TODO: maybe VK_FORMAT_BC2_RGBA_SRGB_BLOCK? And are we sure about BC2? Could it be that it is BC3 (whatever BC3 is)?
@@ -1913,7 +1945,7 @@ VkBuffer vklLoadDdsImageFaceLevelIntoHostCoherentBuffer(const char* file, uint32
 	const auto& gliTex = std::get<gli::texture2d>(gliTpl);
 
 	imageLevel = glm::clamp(imageLevel, gliTex.base_level(), gliTex.max_level());
-	
+
 	auto bufsize = gliTex.size(imageLevel);
 	auto buffer = gliTex.data(0, imageFace, imageLevel);
 	auto host_coherent_buffer = vklCreateHostCoherentBufferWithBackingMemory(bufsize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -2018,7 +2050,7 @@ glm::mat4 vklCreatePerspectiveProjectionMatrix(float field_of_view, float aspect
 
 		// ...in order to represent coordinates in that aforementioned space, we need the inverse, u know:
 		return glm::inverse(rotateAroundXFrom_RH_Yup_to_RH_Ydown);
-	});
+		});
 
 	// Scaling factor for the x and y coordinates which depends on the 
 	// field of view (and the aspect ratio... see matrix construction)
@@ -2038,7 +2070,7 @@ glm::mat4 vklCreatePerspectiveProjectionMatrix(float field_of_view, float aspect
 
 std::string loadModelFromFile(const std::string& model_filename)
 {
-    std::string path = {};
+	std::string path = {};
 
 	std::ifstream infile(model_filename);
 	if (infile.good()) {
@@ -2072,31 +2104,31 @@ VklGeometryData vklLoadModelGeometry(const std::string& path_to_obj)
 
 	VklGeometryData data;
 	for (const tinyobj::shape_t& shape : shapes) {
-        std::map<std::tuple<int, int, int>, uint32_t> uniqueVertices;
-        
+		std::map<std::tuple<int, int, int>, uint32_t> uniqueVertices;
+
 		for (const auto& indices : shape.mesh.indices) {
 			glm::vec3 pos = glm::vec3(
-				attributes.vertices[3 * indices.vertex_index], 
-				attributes.vertices[3 * indices.vertex_index + 1], 
+				attributes.vertices[3 * indices.vertex_index],
+				attributes.vertices[3 * indices.vertex_index + 1],
 				attributes.vertices[3 * indices.vertex_index + 2]
 			);
 			glm::vec2 uv = glm::vec2(
-				attributes.texcoords[2 * indices.texcoord_index], 
+				attributes.texcoords[2 * indices.texcoord_index],
 				1.0f - attributes.texcoords[2 * indices.texcoord_index + 1]
 			);
 			glm::vec3 normal = glm::vec3(
-				attributes.normals[3 * indices.normal_index], 
-				attributes.normals[3 * indices.normal_index + 1], 
+				attributes.normals[3 * indices.normal_index],
+				attributes.normals[3 * indices.normal_index + 1],
 				attributes.normals[3 * indices.normal_index + 2]
 			);
-            
-            std::tuple<int,int,int> tuple = std::tuple<int,int,int>
-                (indices.vertex_index, indices.normal_index, indices.texcoord_index);
-            
-            if (uniqueVertices.find(tuple) == uniqueVertices.end()) {
-                uniqueVertices.insert({tuple, static_cast<uint32_t>(data.positions.size())});
-                data.positions.push_back(pos);
-                data.textureCoordinates.push_back(uv);
+
+			std::tuple<int, int, int> tuple = std::tuple<int, int, int>
+				(indices.vertex_index, indices.normal_index, indices.texcoord_index);
+
+			if (uniqueVertices.find(tuple) == uniqueVertices.end()) {
+				uniqueVertices.insert({ tuple, static_cast<uint32_t>(data.positions.size()) });
+				data.positions.push_back(pos);
+				data.textureCoordinates.push_back(uv);
 				data.normals.push_back(normal);
 			}
 			data.indices.push_back(uniqueVertices[tuple]);
@@ -2108,9 +2140,9 @@ VklGeometryData vklLoadModelGeometry(const std::string& path_to_obj)
 void vklHotReloadPipelines()
 {
 	VKL_LOG("About to hot-reload " << mUserKnownPipelines.size() << " known graphics pipelines...");
-	for(auto it = mUserKnownPipelines.begin(); it != mUserKnownPipelines.end(); it++) {
+	for (auto it = mUserKnownPipelines.begin(); it != mUserKnownPipelines.end(); it++) {
 		auto originalHandle = it->first;
-		std::get<0>(it->second).vertexShaderPath   = std::get<1>(it->second).c_str();
+		std::get<0>(it->second).vertexShaderPath = std::get<1>(it->second).c_str();
 		std::get<0>(it->second).fragmentShaderPath = std::get<2>(it->second).c_str();
 		auto newHandle = createGraphicsPipelineInternal(std::get<0>(it->second), std::get<3>(it->second));
 		if (VK_NULL_HANDLE == newHandle) {

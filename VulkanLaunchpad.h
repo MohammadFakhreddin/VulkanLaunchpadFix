@@ -21,8 +21,8 @@
 #include <vma/vk_mem_alloc.h>
 #endif
 
-// Returns a string describing the given VkResult value
-extern const char *to_string(VkResult result);
+ // Returns a string describing the given VkResult value
+extern const char* to_string(VkResult result);
 
 #ifdef _WIN32
 #define VKL_PATH_SEPARATOR '\\'
@@ -112,13 +112,13 @@ struct VklGraphicsPipelineConfig {
      *	That means that it will be tried to first load from the given value prepended with "assets/shader/".
      *	Only if that fails, it will be tried to load from the given value directly.
      */
-    const char *vertexShaderPath = nullptr;
+    const char* vertexShaderPath = nullptr;
 
     /*! The path to the fragment shader, which can be provided relative to the "assets/shader/" directory.
      *	That means that it will be tried to first load from the given value prepended with "assets/shader/".
      *	Only if that fails, it will be tried to load from the given value directly.
      */
-    const char *fragmentShaderPath = nullptr;
+    const char* fragmentShaderPath = nullptr;
 
     /*!
      *	One description per buffer that is when rendering with a graphics pipeline.
@@ -163,8 +163,8 @@ struct VklGraphicsPipelineConfig {
      */
     std::vector<VkDescriptorSetLayoutBinding> descriptorLayout;
 
-    /*! If set to true, the pipeline will be configured to have blending enabled, 
-     *  where its blend factors are set as follows: 
+    /*! If set to true, the pipeline will be configured to have blending enabled,
+     *  where its blend factors are set as follows:
      *    srcColorBlendFactor=VK_BLEND_FACTOR_SRC_ALPHA
      *    dstColorBlendFactor=VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA
      */
@@ -196,23 +196,31 @@ struct VklGeometryData {
 /* --------------------------------------------- */
 
 // An array of Vulkan instance extensions required by this framework
-extern const char *vklRequiredInstanceExtensions[];
+extern const char* vklRequiredInstanceExtensions[];
 
 /*!
  *  This function returns an array of names of Vulkan instance extensions required
  *  by the framework. The number of elements will be returned via the outCount parameter.
- *  
+ *
  *  @param      out_count   Out-param. The variable pointed to will contain the number of required extensions.
- * 
+ *
  *  @returns    Returns the Vulkan instance extensions required by the Vulkan Launchpad Library as array of const char* elements.
  */
-const char **vklGetRequiredInstanceExtensions(uint32_t *out_count);
+const char** vklGetRequiredInstanceExtensions(uint32_t* out_count);
+
+bool vklIsResized();
+
+void vklResize();
+
+void vklCreateRenderResources(const VklSwapchainConfig& swapchain_config);
+
+void vklDestroyRenderResources();
 
 /*!
  *  Initializes the framework
  */
 bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysicalDevice vk_physical_device,
-                      VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig &swapchain_config);
+    VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig& swapchain_config);
 
 #ifdef VKL_HAS_VMA
 /*!
@@ -220,8 +228,8 @@ bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysica
  *  This overload additionally takes a VmaAllocator handle
  */
 bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysicalDevice vk_physical_device,
-                      VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig &swapchain_config,
-                      VmaAllocator vma_allocator);
+    VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig& swapchain_config,
+    VmaAllocator vma_allocator);
 #endif 
 
 /*!
@@ -318,8 +326,8 @@ enum class PrimitiveTopology
     ePatchList = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST
 };
 VkPipeline vklCreateGraphicsPipeline(
-    const VklGraphicsPipelineConfig &config, 
-    bool loadShadersFromMemory = false, 
+    const VklGraphicsPipelineConfig& config,
+    bool loadShadersFromMemory = false,
     PrimitiveTopology topology = PrimitiveTopology::eTriangleList
 );
 
@@ -327,7 +335,7 @@ VkPipeline vklCreateGraphicsPipeline(
  *	Destroys a graphics pipeline that has been previously created with vklCreateGraphicsPipeline.
  *
  *	@param	pipeline	A valid handle to a graphics pipeline that has been created with vklCreateGraphicsPipeline.
- *						The pipeline will be unusable after this function has returned. 
+ *						The pipeline will be unusable after this function has returned.
  */
 void vklDestroyGraphicsPipeline(VkPipeline pipeline);
 
@@ -336,7 +344,7 @@ void vklDestroyGraphicsPipeline(VkPipeline pipeline);
  *
  *  @param bufferSize            The requested size of the memory in bytes.
  *  @param memoryRequirements    The requested requirements for the memory.
- *  @param memoryPropertyFlags   The memory properties that the allocated buffer must support. 
+ *  @param memoryPropertyFlags   The memory properties that the allocated buffer must support.
  *                               For, e.g., host-coherent memory, pass VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
  *                               For, e.g., device-local memory, pass VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
  */
@@ -391,7 +399,7 @@ void vklDestroyDeviceLocalBufferAndItsBackingMemory(VkBuffer buffer);
  *	@param	data_pointer		Pointer to the beginning of CPU-side data.
  *	@param	data_size_in_bytes	How many bytes shall be copied from the memory address at data_pointer into the buffer?
  */
-void vklCopyDataIntoHostCoherentBuffer(VkBuffer buffer, const void *data_pointer, size_t data_size_in_bytes);
+void vklCopyDataIntoHostCoherentBuffer(VkBuffer buffer, const void* data_pointer, size_t data_size_in_bytes);
 
 /*!
  *	Copies data into the buffer to a given offset, by reading it from the address at data_pointer and of the given byte size.
@@ -401,8 +409,8 @@ void vklCopyDataIntoHostCoherentBuffer(VkBuffer buffer, const void *data_pointer
  *	@param	data_pointer			Pointer to the beginning of CPU-side data.
  *	@param	data_size_in_bytes		How many bytes shall be copied from the memory address at data_pointer into the buffer?
  */
-void vklCopyDataIntoHostCoherentBuffer(VkBuffer buffer, size_t buffer_offset_in_bytes, const void *data_pointer,
-                                       size_t data_size_in_bytes);
+void vklCopyDataIntoHostCoherentBuffer(VkBuffer buffer, size_t buffer_offset_in_bytes, const void* data_pointer,
+    size_t data_size_in_bytes);
 
 /*!
  * Create a new host coherent buffer on the GPU, upload the supplied data from the vector, and return the buffer handle.
@@ -423,7 +431,7 @@ VkBuffer vklCreateHostCoherentBufferAndUploadData(const void* data, size_t size,
  *
  *	@param	descriptor_set		This handle must represent a valid descriptor set.
  *								It will be bound to the VK_PIPELINE_BIND_POINT_GRAPHICS binding point.
- *	@param	pipeline			This handle must represent a valid graphics pipeline that has been created with 
+ *	@param	pipeline			This handle must represent a valid graphics pipeline that has been created with
  *								vklCreateGraphicsPipeline previously. Internally, its pipeline layout will be used.
  */
 void vklBindDescriptorSetToPipeline(VkDescriptorSet descriptor_set, VkPipeline pipeline);
@@ -443,7 +451,7 @@ void vklBindDescriptorSetToPipeline(VkDescriptorSet descriptor_set, VkPipeline p
  */
 VkImage
 vklCreateDeviceLocalImageWithBackingMemory(VkPhysicalDevice physical_device, VkDevice device, uint32_t width, uint32_t height,
-                                           VkFormat format, VkImageUsageFlags usage_flags);
+    VkFormat format, VkImageUsageFlags usage_flags);
 
 /*!
  *	Creates a 2D image (VkImage) of the given size, in the given format, and for the given usage(s) on the device.
@@ -462,8 +470,8 @@ vklCreateDeviceLocalImageWithBackingMemory(VkPhysicalDevice physical_device, VkD
  */
 VkImage
 vklCreateDeviceLocalImageWithBackingMemory(VkPhysicalDevice physical_device, VkDevice device, uint32_t width, uint32_t height,
-                                           VkFormat format, VkImageUsageFlags usage_flags, uint32_t array_layers,
-                                           VkImageCreateFlags flags);
+    VkFormat format, VkImageUsageFlags usage_flags, uint32_t array_layers,
+    VkImageCreateFlags flags);
 
 /*!
  *	Frees the memory (VkDeviceMemory) and destroys the image (VkImage) which has previously been created
@@ -501,14 +509,14 @@ vklCreateDeviceLocalImageWithBackingMemory(uint32_t width, uint32_t height, VkFo
  *	@return A handle to a newly created image with backing memory.
  */
 VkImage vklCreateDeviceLocalImageWithBackingMemory(uint32_t width, uint32_t height, VkFormat format, VkImageUsageFlags usage_flags,
-                                                   uint32_t array_layers, VkImageCreateFlags flags);
+    uint32_t array_layers, VkImageCreateFlags flags);
 
 /*!
  *	Gets the VkPipelineLayout for the given VkPipeline, given that the
  *	VkPipeline has been generated with vklCreateGraphicsPipeline previously.
  *	The pipeline layout of pipelines created with vklCreateGraphicsPipeline
  *	are stored internally and can be retrieved using this function.
- *	
+ *
  *	@param	pipeline	A valid VkPipeline handle which has been created with vklCreateGraphicsPipeline
  *	@return	The VkPipelineLayout handle that was used to create the given pipeline.
  */
@@ -536,7 +544,7 @@ uint32_t vklGetNumFramebuffers();
 uint32_t vklGetNumClearValues();
 
 /*!
- *	Returns the framebuffers at the given index. The index is bounded by the number 
+ *	Returns the framebuffers at the given index. The index is bounded by the number
  *	of swap chain images (see vklGetNumFramebuffers()).
  */
 VkFramebuffer vklGetFramebuffer(uint32_t i);
@@ -557,9 +565,9 @@ VkRenderPass vklGetRenderpass();
  *	The command buffer that is returned is the one that was created during the last
  *	call to vklStartRecordingCommands(). It will remain active until the next call
  *	to vklEndRecordingCommands().
- * 
+ *
  *	The command buffer returned has already begun to record commands. It will continue
- *	recording commands until the next call to vklEndRecordingCommands(). Also during 
+ *	recording commands until the next call to vklEndRecordingCommands(). Also during
  *	the next call to vklEndRecordingCommands(), it will be submitted to the queue.
  */
 VkCommandBuffer vklGetCurrentCommandBuffer();
@@ -598,7 +606,7 @@ struct VklImageInfo {
  *	@param	file	Path to a DDS image file
  *	@return	A struct containing information about the DDS image file.
  */
-VklImageInfo vklGetDdsImageInfo(const char *file);
+VklImageInfo vklGetDdsImageInfo(const char* file);
 
 /*!
  *	Determines image information about a specific mipmap level of
@@ -657,8 +665,8 @@ glm::mat4 vklCreatePerspectiveProjectionMatrix(float field_of_view, float aspect
 /*!
  *  Loads a .obj model from the specified path and fills a VklGeometryData struct with the vertices, indices, normals and uv coordinates, if any exist.
  *  @param  path_to_obj    Path to a 3D model in .obj format, the geometry of which shall be loaded into host memory.
- *	                       Note: the .obj format is the only format that is supported. Trying to load a different 3D model format will fail.  
- *	@return A struct instance containing all the geometry data of the loaded 3D model 
+ *	                       Note: the .obj format is the only format that is supported. Trying to load a different 3D model format will fail.
+ *	@return A struct instance containing all the geometry data of the loaded 3D model
  */
 VklGeometryData vklLoadModelGeometry(const std::string& path_to_obj);
 
@@ -670,16 +678,16 @@ void vklHotReloadPipelines();
 /*!
  *  Enables graphics pipeline hot-reloading to be triggered by users through a defined keyboard shortcut.
  *  Pipeline hot-reloading can be super helpful during shader development. Pipelines containing the updated
- *  shader code can be swapped under the hood during the application is running, without the need to restart 
+ *  shader code can be swapped under the hood during the application is running, without the need to restart
  *  the application.
- *  
+ *
  *  Preconditions in code to enable graphics pipeline hot-reloading:
  *   - Either call vklEnablePipelineHotReloading once at initialization time, or manually invoke vklHotReloadPipelines!
- *   - IMPORTANT: Use vklCmdBindPipeline(VkCommandBuffer, VkPipelineBindPoint, VkPipeline) instead of 
+ *   - IMPORTANT: Use vklCmdBindPipeline(VkCommandBuffer, VkPipelineBindPoint, VkPipeline) instead of
  *                the Vulkan API's vkCmdBindPipeline(VkCommandBuffer, VkPipelineBindPoint, VkPipeline)!
- * 
+ *
  *  @param  glfw_window             GLFW window, which is required to establish a key callback
- *  @param  glfw_key                Desired key which shall trigger pipelines to be hot-reloaded, 
+ *  @param  glfw_key                Desired key which shall trigger pipelines to be hot-reloaded,
  *                                  as GLFW key code (e.g. GLFW_KEY_F5, or GLFW_KEY_R)
  *  @param  glfw_modifier_keys      If desired, modifier keys can be added to the keyboard shortcut through this parameter.
  *                                  Useful values are: GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, or GLFW_MOD_ALT
@@ -691,12 +699,12 @@ void vklEnablePipelineHotReloading(GLFWwindow* glfw_window, int glfw_key, int gl
 /*!
  *  Replacement function for the Vulkan API's vkCmdBindPipeline function, adding support for pipeline hot-reloading,
  *  by using the most up-to-date version of possibly hot-reloaded pipeline handles under the hood.
- * 
+ *
  *  Other than that, it is just a 1:1 proxy for vkCmdBindPipeline. All parameters are the same.
  *  @param  commandBuffer           the command buffer that the pipeline will be bound to.
- *  @param  pipelineBindPoint       a VkPipelineBindPoint value specifying to which bind point the pipeline is bound. 
+ *  @param  pipelineBindPoint       a VkPipelineBindPoint value specifying to which bind point the pipeline is bound.
  *  @param  pipeline                the pipeline to be bound.
- *                                  
+ *
  *  More information can be found in the Vulkan specification: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBindPipeline.html
  */
 void vklCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
