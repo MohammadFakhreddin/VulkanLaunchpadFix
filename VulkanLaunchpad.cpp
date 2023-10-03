@@ -1020,13 +1020,15 @@ const char** vklGetRequiredInstanceExtensions(uint32_t* out_count)
 	return vklRequiredInstanceExtensions;
 }
 
-bool vklIsResized()
+void vklNotifyResized(const VklSwapchainConfig& swapchain_config)
 {
-	return mResized;
+	mResized = true;
+	mSwapchainConfig = swapchain_config;
 }
 
 void vklResize()
 {
+	mResized = false;
 	vkDeviceWaitIdle(vklGetDevice());
 	vklDestroyRenderResources();
 	vklCreateRenderResources(mSwapchainConfig);
@@ -1081,7 +1083,7 @@ void vklCreateRenderResources(const VklSwapchainConfig& swapchain_config)
 	if (swapchain_config.imageExtent.width != surfaceCapabilities.currentExtent.width || swapchain_config.imageExtent.height != surfaceCapabilities.currentExtent.height) {
 		std::cout << "WARNING: Swapchain config's extents[" << swapchain_config.imageExtent.width << "x" << swapchain_config.imageExtent.height << "] do not match the surface capabilities' extents[" << surfaceCapabilities.currentExtent.width << "x" << surfaceCapabilities.currentExtent.height << "]" << VKL_DESCRIBE_FILE_LOCATION_FOR_OUT_STREAM << "\n";
 	}
-
+	
 	// Wrap swapchain images with IMAGE VIEWS and prepare data for RENDERPASS:
 	mSwapchainImageViews.resize(mSwapchainConfig.swapchainImages.size());
 
@@ -1090,6 +1092,8 @@ void vklCreateRenderResources(const VklSwapchainConfig& swapchain_config)
 	std::vector<vk::AttachmentReference> colorAttachmentsInSubpass0;
 	// Layout transitions for all depth attachments in here:
 	std::vector<vk::AttachmentReference> depthAttachmentsInSubpass0;
+
+	mClearValues.clear();
 
 	for (size_t i = 0; i < mSwapchainConfig.swapchainImages.size(); ++i) {
 		std::vector<VklSwapchainImageDetails> attachments_0;
@@ -1452,6 +1456,11 @@ double vklWaitForNextSwapchainImage()
 		VKL_EXIT_WITH_ERROR("Framework not initialized. Ensure to invoke vklInitFramework beforehand!");
 	}
 
+	if (mResized == true)
+	{
+		vklResize();
+	}
+
 	destroyOutdatedPipelines();
 
 	// Advance the frame ID:
@@ -1505,6 +1514,11 @@ void vklPresentCurrentSwapchainImage()
 {
 	if (!vklFrameworkInitialized()) {
 		VKL_EXIT_WITH_ERROR("Framework not initialized. Ensure to invoke vklInitFramework beforehand!");
+	}
+
+	if (mResized == true)
+	{
+		return;
 	}
 
 	// Submit yet another "fake" (but still) work package to signal the end of the rendering:

@@ -208,9 +208,9 @@ extern const char* vklRequiredInstanceExtensions[];
  */
 const char** vklGetRequiredInstanceExtensions(uint32_t* out_count);
 
-bool vklIsResized();
+void vklNotifyResized(const VklSwapchainConfig& swapchain_config);
 
-void vklResize();
+void vklResize(const VklSwapchainConfig& swapchain_config);
 
 void vklCreateRenderResources(const VklSwapchainConfig& swapchain_config);
 
