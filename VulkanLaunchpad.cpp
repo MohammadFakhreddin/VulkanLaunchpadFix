@@ -1065,6 +1065,35 @@ void vklBindDescriptorSetToPipeline(VkDescriptorSet descriptor_set, VkPipeline p
 	);
 }
 
+void vklSetPushConstants(VkPipeline pipeline, VkShaderStageFlags stageFlags, const void* data, size_t size)
+{
+	if (!vklFrameworkInitialized()) {
+		VKL_EXIT_WITH_ERROR("Framework not initialized. Ensure to invoke vklInitFramework beforehand!");
+	}
+	if (mSingleUseCommandBuffers.empty()) {
+		VKL_EXIT_WITH_ERROR("There are no command buffers to record commands into. Have you called vklStartRecordingCommands() beforehand?");
+	}
+	auto& cb = mSingleUseCommandBuffers.back().get();
+
+	pipeline = getGraphicsPipelineOrItsSurrogate(pipeline);
+
+	auto searchPl = mPipelineLayouts.find(pipeline);
+	if (mPipelineLayouts.end() == searchPl) {
+		VKL_EXIT_WITH_ERROR("Couldn't find the VkPipeline passed to vklBindDescriptorSetToPipeline. Is it a valid handle and has it been created with vklCreateGraphicsPipeline(...)?");
+	}
+
+	auto pipeLayout = std::get<vk::UniquePipelineLayout>(searchPl->second).get();
+
+	vkCmdPushConstants(
+		cb,
+		pipeLayout,
+		stageFlags,
+		0.0,
+		size,
+		data
+	);
+}
+
 VkPipelineLayout vklGetLayoutForPipeline(VkPipeline pipeline)
 {
 	pipeline = getGraphicsPipelineOrItsSurrogate(pipeline);

@@ -438,6 +438,8 @@ VkBuffer vklCreateHostCoherentBufferAndUploadData(const void* data, size_t size,
  */
 void vklBindDescriptorSetToPipeline(VkDescriptorSet descriptor_set, VkPipeline pipeline);
 
+void vklSetPushConstants(VkPipeline pipeline, VkShaderStageFlags stageFlags, const void* data, size_t const size);
+
 /*!
  *	Creates a 2D image (VkImage) of the given size, in the given format, and for the given usage(s) on the device.
  *	Also creates backing memory (VkDeviceMemory) for that image in device local memory (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT).
