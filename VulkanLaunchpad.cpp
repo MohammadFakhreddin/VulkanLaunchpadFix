@@ -1105,6 +1105,17 @@ VkPipelineLayout vklGetLayoutForPipeline(VkPipeline pipeline)
 	return static_cast<VkPipelineLayout>(std::get<vk::UniquePipelineLayout>(searchPl->second).get());
 }
 
+VkDescriptorSetLayout vklGetDescriptorLayout(VkPipeline pipeline)
+{
+	pipeline = getGraphicsPipelineOrItsSurrogate(pipeline);
+
+	auto searchPl = mPipelineLayouts.find(pipeline);
+	if (mPipelineLayouts.end() == searchPl) {
+		VKL_EXIT_WITH_ERROR("Couldn't find the VkPipeline passed to vklBindDescriptorSetToPipeline. Is it a valid handle and has it been created with vklCreateGraphicsPipeline(...)?");
+	}
+	return static_cast<VkDescriptorSetLayout>(std::get<vk::UniqueDescriptorSetLayout>(searchPl->second).get());
+}
+
 void vklCreateRenderResources(const VklSwapchainConfig& swapchain_config)
 {
 	mSwapchainConfig = swapchain_config;

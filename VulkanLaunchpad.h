@@ -526,6 +526,8 @@ VkImage vklCreateDeviceLocalImageWithBackingMemory(uint32_t width, uint32_t heig
  */
 VkPipelineLayout vklGetLayoutForPipeline(VkPipeline pipeline);
 
+VkDescriptorSetLayout vklGetDescriptorLayout(VkPipeline pipeline);
+
 /*!
  *	Returns the currently swap chain image index which has been set during the
  *	last call to vklWaitForNextSwapchainImage() when acquiring the next swap chain
