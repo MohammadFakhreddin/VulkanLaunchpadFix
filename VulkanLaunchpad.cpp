@@ -2163,21 +2163,25 @@ VklGeometryData vklLoadModelGeometry(const std::string& path_to_obj)
 	for (const tinyobj::shape_t& shape : shapes) {
 		std::map<std::tuple<int, int, int>, uint32_t> uniqueVertices;
 
+		bool hasVertices = attributes.vertex_weights.empty() == false;
+		bool hasTexCoords = attributes.texcoords.empty() == false;
+		bool hasNormals = attributes.normals.empty() == false;
+
 		for (const auto& indices : shape.mesh.indices) {
-			glm::vec3 pos = glm::vec3(
+			glm::vec3 pos = hasVertices ? glm::vec3(
 				attributes.vertices[3 * indices.vertex_index],
 				attributes.vertices[3 * indices.vertex_index + 1],
 				attributes.vertices[3 * indices.vertex_index + 2]
-			);
-			glm::vec2 uv = glm::vec2(
+			) : glm::vec3{};
+			glm::vec2 uv = hasTexCoords ? glm::vec2(
 				attributes.texcoords[2 * indices.texcoord_index],
 				1.0f - attributes.texcoords[2 * indices.texcoord_index + 1]
-			);
-			glm::vec3 normal = glm::vec3(
+			) : glm::vec2{};
+			glm::vec3 normal = hasNormals ? glm::vec3(
 				attributes.normals[3 * indices.normal_index],
 				attributes.normals[3 * indices.normal_index + 1],
 				attributes.normals[3 * indices.normal_index + 2]
-			);
+			) : glm::vec3{};
 
 			std::tuple<int, int, int> tuple = std::tuple<int, int, int>
 				(indices.vertex_index, indices.normal_index, indices.texcoord_index);
