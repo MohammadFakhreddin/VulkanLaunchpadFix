@@ -654,6 +654,13 @@ VkPipeline createGraphicsPipelineInternal(
 		, nullptr, mDispatchLoader
 	);
 
+	std::vector<VkDynamicState> dynamicStates{ VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	VkPipelineDynamicStateCreateInfo vkDynamicStateCreateInfo{};
+	vkDynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	vkDynamicStateCreateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+	vkDynamicStateCreateInfo.pDynamicStates = dynamicStates.data();
+	vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo(vkDynamicStateCreateInfo);
+
 	// Put everything together:
 	auto pipelineCreateInfo = vk::GraphicsPipelineCreateInfo{}
 		.setStageCount(static_cast<uint32_t>(shaderStages.size())).setPStages(shaderStages.data())
@@ -665,7 +672,9 @@ VkPipeline createGraphicsPipelineInternal(
 		.setPDepthStencilState(&depthStencilState)
 		.setPColorBlendState(&colorBlendState)
 		.setLayout(pipelineLayout.get())
-		.setRenderPass(mRenderpass.get()).setSubpass(0u); // <--- Which subpass of the given renderpass we are going to use this graphics pipeline for
+		.setRenderPass(mRenderpass.get()).setSubpass(0u)
+		.setPDynamicState(&dynamicStateCreateInfo); // <--- Which subpass of the given renderpass we are going to use this graphics pipeline for
+	
 	// FINALLY:
 	auto graphicsPipeline = mDevice.createGraphicsPipeline(nullptr, pipelineCreateInfo).value;
 
@@ -1317,6 +1326,7 @@ void vklDestroyRenderResources()
 		}
 	}
 	mSwapchainImageViews.clear();
+	
 }
 
 bool vklInitFramework(VkInstance vk_instance, VkSurfaceKHR vk_surface, VkPhysicalDevice vk_physical_device, VkDevice vk_device, VkQueue vk_queue, const VklSwapchainConfig& swapchain_config)
@@ -1584,7 +1594,7 @@ void vklPresentCurrentSwapchainImage()
 		.setPSwapchains(&swapchainHandle)
 		.setPImageIndices(&mCurrentSwapChainImageIndex);
 
-	auto returnCode = static_cast<VkResult>(mQueue.presentKHR(presentInfo));
+	auto returnCode = vkQueuePresentKHR(mQueue, reinterpret_cast<const VkPresentInfoKHR *>(&presentInfo));
 	if (returnCode == VK_SUBOPTIMAL_KHR || returnCode == VK_ERROR_OUT_OF_DATE_KHR)
 	{
 		mResized = true;
@@ -1624,6 +1634,24 @@ void vklStartRecordingCommands()
 
 	// Start recording:
 	cb.begin(vk::CommandBufferBeginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+
+	VkViewport viewport = {};
+	viewport.x = 0.0f;
+	viewport.y = 0.0f;
+	viewport.width = static_cast<float>(mSwapchainConfig.imageExtent.width);
+	viewport.height = static_cast<float>(mSwapchainConfig.imageExtent.height);
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+
+	VkRect2D scissor = {};
+	scissor.offset = {0, 0};
+	scissor.extent = {
+		static_cast<uint32_t>(mSwapchainConfig.imageExtent.width), 
+		static_cast<uint32_t>(mSwapchainConfig.imageExtent.height)
+	};
+
+	vkCmdSetViewport(cb, 0, 1, &viewport);
+	vkCmdSetScissor(cb, 0, 1, &scissor);
 
 	cb.beginRenderPass(vk::RenderPassBeginInfo{
 		mRenderpass.get(), mFramebuffers[mCurrentSwapChainImageIndex].get(),
